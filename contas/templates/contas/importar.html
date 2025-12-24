@@ -1,0 +1,120 @@
+{% extends 'contas/base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3><i class="bi bi-robot"></i> Importação Inteligente</h3>
+        {% if preview %}
+            <span class="badge bg-warning text-dark">Modo de Revisão</span>
+        {% endif %}
+    </div>
+
+    {% if not preview %}
+    <div class="card shadow">
+        <div class="card-body p-5 text-center">
+            <h5 class="card-title mb-4">Envie seu Extrato (PDF)</h5>
+            <p class="text-muted">A IA irá ler, categorizar e permitir que você revise antes de salvar.</p>
+
+            <form method="post" enctype="multipart/form-data" class="d-inline-block text-start" style="max-width: 400px;">
+                {% csrf_token %}
+                <div class="mb-3">
+                    {{ form.as_p }}
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="bi bi-magic"></i> Processar com IA
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+
+
+    {% if preview %}
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="confirmar_dados" value="1">
+
+        <div class="card shadow mb-4">
+            <div class="card-header bg-success text-white">
+                Confira os dados abaixo (Edite se necessário)
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 150px;">Data</th>
+                            <th>Descrição</th>
+                            <th style="width: 130px;">Valor (R$)</th>
+                            <th style="width: 100px;">Tipo</th>
+                            <th style="width: 200px;">Categoria Sugerida</th>
+                            <th style="width: 50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in transacoes_temp %}
+                        <tr>
+                            <td>
+                                <input type="date" name="data" class="form-control form-control-sm"
+                                       value="{{ item.data }}">
+                            </td>
+
+                            <td>
+                                <input type="text" name="descricao" class="form-control form-control-sm"
+                                       value="{{ item.descricao }}">
+                            </td>
+
+                            <td>
+                                <input type="number" step="0.01" name="valor" class="form-control form-control-sm"
+                                       value="{{ item.valor }}">
+                            </td>
+
+                            <td>
+                                <select name="tipo" class="form-select form-select-sm">
+                                    <option value="D" {% if item.tipo == 'D' %}selected{% endif %}>Despesa</option>
+                                    <option value="R" {% if item.tipo == 'R' %}selected{% endif %}>Receita</option>
+                                </select>
+                            </td>
+
+                            <td>
+                                <select name="categoria" class="form-select form-select-sm">
+                                    <option value="">Selecione...</option>
+                                    {% for cat in categorias %}
+                                        <option value="{{ cat.id }}" {% if cat.nome == item.categoria %}selected{% endif %}>
+                                            {{ cat.nome }}
+                                        </button>
+                                    {% endfor %}
+                                    {% if item.categoria == 'Importados' %}
+                                        <option value="" selected>Importados (Novo)</option>
+                                    {% endif %}
+                                </select>
+                            </td>
+
+                            <td class="text-center">
+                                <button type="button" class="btn btn-sm text-danger" onclick="this.closest('tr').remove()">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-end gap-2 mb-5">
+            <button type="submit" name="cancelar" class="btn btn-outline-secondary">
+                <i class="bi bi-trash"></i> Cancelar Tudo
+            </button>
+
+            <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-check-lg"></i> Confirmar e Salvar
+            </button>
+        </div>
+    </form>
+    {% endif %}
+
+</div>
+{% endblock %}

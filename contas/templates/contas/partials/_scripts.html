@@ -1,0 +1,112 @@
+{{ grafico_despesas_labels|json_script:"despesas-labels" }}
+{{ grafico_despesas_data|json_script:"despesas-data" }}
+
+{{ grafico_receitas_labels|json_script:"receitas-labels" }}
+{{ grafico_receitas_data|json_script:"receitas-data" }}
+
+{{ grafico_anual_meses|json_script:"anual-labels" }}
+{{ grafico_anual_receitas|json_script:"anual-receitas" }}
+{{ grafico_anual_despesas|json_script:"anual-despesas" }}
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+
+        // --- Botão Hoje (Mantido) ---
+        const btnHoje = document.getElementById('btn-hoje');
+        const campoData = document.getElementById('id_data');
+        if (btnHoje && campoData) {
+            btnHoje.addEventListener('click', function() {
+                const hoje = new Date();
+                const offset = hoje.getTimezoneOffset() * 60000;
+                campoData.value = new Date(hoje.getTime() - offset).toISOString().split('T')[0];
+            });
+        }
+
+        function criarGraficoRosca(canvasId, labelsId, dataId, labelTitulo, cores) {
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) return; // Se não existir o elemento, sai
+
+            const labels = JSON.parse(document.getElementById(labelsId).textContent);
+            const data = JSON.parse(document.getElementById(dataId).textContent);
+
+            // Esconde gráfico se vazio
+            if (data.length === 0) {
+                ctx.style.display = 'none';
+                if (ctx.parentElement.querySelector('.msg-vazio')) {
+                    ctx.parentElement.querySelector('.msg-vazio').style.display = 'block';
+                }
+                return;
+            }
+
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: cores,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } },
+                        title: { display: true, text: labelTitulo }
+                    }
+                }
+            });
+        }
+
+        // Gráfico de Despesas
+        criarGraficoRosca('chartDespesas', 'despesas-labels', 'despesas-data', 'Top Despesas',
+            ['#FF6384', '#FF9F40', '#FFCD56', '#C9CBCF', '#4BC0C0']);
+
+        // Gráfico de Receitas
+        criarGraficoRosca('chartReceitas', 'receitas-labels', 'receitas-data', 'Top Receitas',
+            ['#36A2EB', '#4BC0C0', '#9966FF', '#C9CBCF', '#FF6384']);
+
+
+        // Gráfico de Barras Empilhadas
+        const ctxAnual = document.getElementById('chartAnual');
+        if (ctxAnual) {
+            const meses = JSON.parse(document.getElementById('anual-labels').textContent);
+            const dadosRec = JSON.parse(document.getElementById('anual-receitas').textContent);
+            const dadosDes = JSON.parse(document.getElementById('anual-despesas').textContent);
+
+            new Chart(ctxAnual, {
+                type: 'bar',
+                data: {
+                    labels: meses,
+                    datasets: [
+                        {
+                            label: 'Receitas',
+                            data: dadosRec,
+                            backgroundColor: '#198754',
+                        },
+                        {
+                            label: 'Despesas',
+                            data: dadosDes,
+                            backgroundColor: '#dc3545',
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true, beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        title: { display: true, text: 'Evolução Anual (Receita vs Despesa)' }
+                    }
+                }
+            });
+        }
+    });
+</script>

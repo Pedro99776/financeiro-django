@@ -1,0 +1,61 @@
+<div class="card mb-3 border-0 bg-light">
+    <div class="card-body py-2">
+        <form method="get" class="row align-items-center justify-content-end gx-2">
+            <div class="col-auto">
+                <span class="fw-bold text-secondary small">Filtros:</span>
+            </div>
+            <div class="col-auto">
+                <select name="tipo" class="form-select form-select-sm">
+                    <option value="">Todos os Tipos</option>
+                    <option value="R" {% if tipo_atual == 'R' %}selected{% endif %}>Receitas</option>
+                    <option value="D" {% if tipo_atual == 'D' %}selected{% endif %}>Despesas</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="mes" class="form-select form-select-sm">
+                    {% for num, nome in meses %}
+                    <option value="{{ num }}" {% if num == mes_atual %}selected{% endif %}>{{ nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="ano" class="form-select form-select-sm">
+                    {% for ano in anos %}
+                    <option value="{{ ano }}" {% if ano == ano_atual %}selected{% endif %}>{{ ano }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-dark"><i class="bi bi-filter"></i></button>
+                <a href="{% url 'listagem' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row justify-content-center mb-2">
+    <div class="col-md-6 col-lg-5">
+        <div class="card text-center border-secondary shadow-sm">
+            <div class="card-header bg-white text-uppercase small fw-bold text-muted">Saldo do Mês</div>
+            <div class="card-body">
+                <h2 class="display-4 {% if saldo < 0 %}text-danger{% else %}text-primary{% endif %} fw-bold">
+                    R$ {{ saldo|default:"0.00" }}
+                </h2>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row mb-4 justify-content-center">
+    <div class="col-md-3 col-6">
+        <div class="card text-white bg-success mb-3 text-center">
+            <div class="card-header py-1 small">Receitas</div>
+            <div class="card-body py-2"><h4 class="mb-0">R$ {{ total_receitas|default:"0.00" }}</h4></div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card text-white bg-danger mb-3 text-center">
+            <div class="card-header py-1 small">Despesas</div>
+            <div class="card-body py-2"><h4 class="mb-0">R$ {{ total_despesas|default:"0.00" }}</h4></div>
+        </div>
+    </div>
+</div>

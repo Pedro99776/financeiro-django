@@ -1,0 +1,100 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<div class="row">
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">Fluxo de Caixa</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-area" style="position: relative; height: 300px;">
+                    <canvas id="meuGrafico"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Extrato Detalhado</h6>
+            </div>
+            <div class="card-body p-0" style="max-height: 340px; overflow-y: auto;">
+                <div class="list-group list-group-flush">
+                    {% if transacoes %}
+                        {% for t in transacoes %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center px-3 py-2">
+                            <div>
+                                <div class="fw-bold text-dark small">{{ t.descricao|default:"Sem descrição" }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">
+                                    {{ t.data|date:"d/m/Y" }} • {{ t.categoria.nome|default:"Geral" }}
+                                </div>
+                            </div>
+                            <span class="badge {% if t.tipo == 'D' %}bg-danger{% else %}bg-success{% endif %} rounded-pill">
+                                R$ {{ t.valor|floatformat:2 }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="p-4 text-center text-muted">
+                            <i class="bi bi-inbox fs-1"></i>
+                            <p class="mt-2 small">Nenhuma transação neste período.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        var ctx = document.getElementById("meuGrafico").getContext('2d');
+
+        // Recebe os dados do Django (safe permite renderizar o JSON puro)
+        var labels = {{ grafico_labels|safe }};
+        var dadosReceitas = {{ grafico_receitas|safe }};
+        var dadosDespesas = {{ grafico_despesas|safe }};
+
+        var myChart = new Chart(ctx, {
+            type: 'bar', // Pode mudar para 'line' se preferir
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Receitas',
+                        data: dadosReceitas,
+                        backgroundColor: 'rgba(25, 135, 84, 0.7)', // Verde Bootstrap
+                        borderColor: 'rgba(25, 135, 84, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Despesas',
+                        data: dadosDespesas,
+                        backgroundColor: 'rgba(220, 53, 69, 0.7)', // Vermelho Bootstrap
+                        borderColor: 'rgba(220, 53, 69, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { borderDash: [2, 4] }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    });
+</script>

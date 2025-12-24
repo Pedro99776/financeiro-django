@@ -1,0 +1,56 @@
+{% extends 'contas/base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-4">
+    <div class="col-md-6">
+        <div class="card shadow border-0">
+            <div class="card-header bg-white py-3">
+                <h5 class="mb-0 text-primary"><i class="bi bi-receipt"></i> Nova Transação</h5>
+            </div>
+            <div class="card-body p-4">
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Data</label>
+                        <input type="date" name="data" class="form-control" required value="{% now 'Y-m-d' %}">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label fw-bold">Valor</label>
+                            <input type="number" step="0.01" name="valor" class="form-control" placeholder="0,00" required>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label fw-bold">Tipo</label>
+                            <select name="tipo" class="form-select">
+                                <option value="D">Despesa</option>
+                                <option value="R">Receita</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descrição <span class="text-muted small">(Opcional)</span></label>
+                        <input type="text" name="descricao" class="form-control" placeholder="Ex: Mercado, Uber...">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <label class="form-label fw-bold">Categoria</label>
+                            {{ form.categoria }} </div>
+                        <div class="col-6 mb-3">
+                            <label class="form-label fw-bold">Conta</label>
+                            {{ form.conta }}
+                        </div>
+                    </div>
+
+                    <div class="d-grid gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">Salvar Transação</button>
+                        <a href="{% url 'listagem' %}" class="btn btn-outline-secondary">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

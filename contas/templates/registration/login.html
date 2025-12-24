@@ -1,0 +1,43 @@
+{% extends 'contas/base.html' %}
+
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0"><i class="bi bi-person-lock"></i> Acesso Restrito</h4>
+            </div>
+            <div class="card-body p-4">
+                
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    {% if form.errors %}
+                        <div class="alert alert-danger py-2 small">
+                            Usuário ou senha incorretos.
+                        </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Usuário</label>
+                        <input type="text" name="username" class="form-control" placeholder="Digite seu usuário" required autofocus>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Senha</label>
+                        <input type="password" name="password" class="form-control" placeholder="********" required>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">Entrar</button>
+                    </div>
+                </form>
+
+            </div>
+            <div class="card-footer text-center bg-light small">
+                Sistema de Controle Financeiro
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
