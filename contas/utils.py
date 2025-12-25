@@ -3,7 +3,8 @@ import os
 import json
 import tempfile
 from datetime import datetime
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
+
+from google.genai.types import HarmCategory, HarmBlockThreshold
 
 
 def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
