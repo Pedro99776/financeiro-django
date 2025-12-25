@@ -4,20 +4,19 @@
 {% block content %}
 <div class="container-fluid">
 
-    <form method="get" class="row g-3 align-items-center mb-5 bg-white p-3 rounded shadow-sm">
-        <input type="hidden" name="filtro_ativo" value="1">
+    <!-- Filtros -->
+    <form id="filtrosForm" class="row g-3 align-items-center mb-5 bg-white p-3 rounded shadow-sm">
         <div class="col-auto">
             <label class="fw-bold small text-muted">Ano:</label>
-            <select name="ano" class="form-select form-select-sm" onchange="this.form.submit()">
+            <select name="ano" id="filtroAno" class="form-select form-select-sm">
                 <option value="2024" {% if ano_atual == 2024 %}selected{% endif %}>2024</option>
                 <option value="2025" {% if ano_atual == 2025 %}selected{% endif %}>2025</option>
                 <option value="2026" {% if ano_atual == 2026 %}selected{% endif %}>2026</option>
             </select>
         </div>
-
         <div class="col-auto">
             <label class="fw-bold small text-muted">Mês:</label>
-            <select name="mes" class="form-select form-select-sm" onchange="this.form.submit()" {% if eh_ano_inteiro %}disabled{% endif %}>
+            <select name="mes" id="filtroMes" class="form-select form-select-sm">
                 <option value="1" {% if mes_atual == 1 %}selected{% endif %}>Janeiro</option>
                 <option value="2" {% if mes_atual == 2 %}selected{% endif %}>Fevereiro</option>
                 <option value="3" {% if mes_atual == 3 %}selected{% endif %}>Março</option>
@@ -32,14 +31,12 @@
                 <option value="12" {% if mes_atual == 12 %}selected{% endif %}>Dezembro</option>
             </select>
         </div>
-
         <div class="col-auto d-flex align-items-center pt-3">
             <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="ano_inteiro" id="chkAno" onchange="this.form.submit()" {% if eh_ano_inteiro %}checked{% endif %}>
+                <input class="form-check-input" type="checkbox" name="ano_inteiro" id="chkAno" {% if eh_ano_inteiro %}checked{% endif %}>
                 <label class="form-check-label fw-bold" for="chkAno">Ver Ano Inteiro</label>
             </div>
         </div>
-
         <div class="col text-end">
             <a href="{% url 'nova_transacao' %}" class="btn btn-primary btn-sm">
                 <i class="bi bi-plus-lg"></i> Adicionar
@@ -47,158 +44,286 @@
         </div>
     </form>
 
-    <div class="text-center mb-5">
-        <h6 class="text-uppercase text-muted ls-1">Saldo em Caixa</h6>
-        <h1 class="display-3 fw-bold {% if saldo < 0 %}text-danger{% else %}text-primary{% endif %}">
-            R$ {{ saldo|floatformat:2|intcomma }}
-        </h1>
-
-        <div class="row justify-content-center mt-4">
-            <div class="col-md-3">
-                <div class="card border-0 bg-success bg-opacity-10">
-                    <div class="card-body text-center">
-                        <small class="text-success fw-bold text-uppercase">Receitas</small>
-                        <h4 class="text-success mb-0">R$ {{ total_receitas|floatformat:2|intcomma }}</h4>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-0 bg-danger bg-opacity-10">
-                    <div class="card-body text-center">
-                        <small class="text-danger fw-bold text-uppercase">Despesas</small>
-                        <h4 class="text-danger mb-0">R$ {{ total_despesas|floatformat:2|intcomma }}</h4>
-                    </div>
-                </div>
-            </div>
+    <!-- Indicador de Carregamento -->
+    <div id="loading" class="text-center my-5" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Carregando...</span>
         </div>
     </div>
 
-    <div class="row mb-4">
-        <div class="col-md-6 mb-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white fw-bold">Receitas por Categoria</div>
-                <div class="card-body">
-                    <div style="height: 250px;">
-                        <canvas id="chartReceitasCat"></canvas>
+    <!-- Conteúdo Dinâmico -->
+    <div id="conteudo" style="visibility: hidden;">
+        <!-- Resumo Financeiro -->
+        <div class="text-center mb-5">
+            <h6 class="text-uppercase text-muted ls-1">Saldo em Caixa</h6>
+            <h1 id="saldo" class="display-3 fw-bold">R$ 0,00</h1>
+            <div class="row justify-content-center mt-4">
+                <div class="col-md-3">
+                    <div class="card border-0 bg-success bg-opacity-10">
+                        <div class="card-body text-center">
+                            <small class="text-success fw-bold text-uppercase">Receitas</small>
+                            <h4 id="totalReceitas" class="text-success mb-0">R$ 0,00</h4>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 bg-danger bg-opacity-10">
+                        <div class="card-body text-center">
+                            <small class="text-danger fw-bold text-uppercase">Despesas</small>
+                            <h4 id="totalDespesas" class="text-danger mb-0">R$ 0,00</h4>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 mb-3">
-            <div class="card shadow-sm border-0 h-100">
-                <div class="card-header bg-white fw-bold">Despesas por Categoria</div>
-                <div class="card-body">
-                    <div style="height: 250px;">
-                        <canvas id="chartDespesasCat"></canvas>
-                    </div>
+
+        <!-- Gráficos -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold">Receitas por Categoria</div>
+                    <div class="card-body"><div style="height: 250px;"><canvas id="chartReceitasCat"></canvas></div></div>
+                </div>
+            </div>
+            <div class="col-md-6 mb-3">
+                <div class="card shadow-sm border-0 h-100">
+                    <div class="card-header bg-white fw-bold">Despesas por Categoria</div>
+                    <div class="card-body"><div style="height: 250px;"><canvas id="chartDespesasCat"></canvas></div></div>
                 </div>
             </div>
         </div>
-    </div>
+        <div class="card shadow-sm border-0 mb-5">
+            <div class="card-header bg-white fw-bold">Fluxo de Caixa</div>
+            <div class="card-body"><div style="height: 300px;"><canvas id="chartFluxo"></canvas></div></div>
+        </div>
 
-    <div class="card shadow-sm border-0 mb-5">
-        <div class="card-header bg-white fw-bold">Fluxo de Caixa {% if eh_ano_inteiro %}(Anual){% else %}(Mensal){% endif %}</div>
-        <div class="card-body">
-            <div style="height: 300px;">
-                <canvas id="chartFluxo"></canvas>
+        <!-- Tabela de Transações -->
+        <div class="card shadow-sm border-0 mb-5">
+            <div class="card-header bg-white py-3">
+                <h5 class="m-0 font-weight-bold text-dark"><i class="bi bi-list-ul"></i> Extrato Detalhado</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Descrição</th>
+                            <th>Categoria</th>
+                            <th>Conta</th>
+                            <th class="text-end">Valor</th>
+                            <th class="text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaTransacoes">
+                        <!-- Linhas inseridas via JS -->
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
-
-    <div class="card shadow-sm border-0 mb-5">
-        <div class="card-header bg-white py-3">
-            <h5 class="m-0 font-weight-bold text-dark"><i class="bi bi-list-ul"></i> Extrato Detalhado</h5>
-        </div>
-        <div class="table-responsive">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
-                    <tr>
-                        <th>Data</th>
-                        <th>Descrição</th>
-                        <th>Categoria</th>
-                        <th>Conta</th>
-                        <th class="text-end">Valor</th>
-                        <th class="text-center">Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in transacoes %}
-                    <tr>
-                        <td class="text-muted" style="width: 120px;">{{ t.data|date:"d/m/Y" }}</td>
-                        <td class="fw-bold text-dark">{{ t.descricao|default:"-" }}</td>
-                        <td><span class="badge bg-light text-dark border">{{ t.categoria.nome }}</span></td>
-                        <td class="small text-muted">{{ t.conta.banco }}</td>
-                        <td class="text-end fw-bold {% if t.tipo == 'D' %}text-danger{% else %}text-success{% endif %}">
-                            {% if t.tipo == 'D' %}-{% endif %} R$ {{ t.valor|floatformat:2|intcomma }}
-                        </td>
-                        <td class="text-center">
-                            <a href="{% url 'update_transacao' t.id %}" class="btn btn-sm btn-link text-secondary"><i class="bi bi-pencil"></i></a>
-                            <a href="{% url 'delete_transacao' t.id %}" class="btn btn-sm btn-link text-danger"><i class="bi bi-trash"></i></a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
-                            Nenhuma transação encontrada neste período.
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-    document.addEventListener("DOMContentLoaded", function() {
+document.addEventListener("DOMContentLoaded", function() {
+    // --- 1. INICIALIZAÇÃO ---
+    const filtrosForm = document.getElementById('filtrosForm');
+    const loadingDiv = document.getElementById('loading');
+    const conteudoDiv = document.getElementById('conteudo');
 
-        // --- 1. CONFIGURAÇÃO FLUXO DE CAIXA (BARRAS) ---
-        new Chart(document.getElementById("chartFluxo"), {
+    let chartFluxo, chartReceitasCat, chartDespesasCat; // Variáveis para guardar as instâncias dos gráficos
+
+    // --- 2. FUNÇÕES DE RENDERIZAÇÃO ---
+    function formatarMoeda(valor) {
+        return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function renderizarResumo(data) {
+        const saldoEl = document.getElementById('saldo');
+        saldoEl.textContent = formatarMoeda(data.saldo);
+        saldoEl.className = `display-3 fw-bold ${data.saldo < 0 ? 'text-danger' : 'text-primary'}`;
+        document.getElementById('totalReceitas').textContent = formatarMoeda(data.total_receitas);
+        document.getElementById('totalDespesas').textContent = formatarMoeda(data.total_despesas);
+    }
+
+    function renderizarTabela(transacoes) {
+        const tbody = document.getElementById('tabelaTransacoes');
+        tbody.innerHTML = ''; // Limpa a tabela
+
+        if (transacoes.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted">Nenhuma transação encontrada.</td></tr>`;
+            return;
+        }
+
+        transacoes.forEach(t => {
+            const valorFormatado = formatarMoeda(t.valor);
+            const classeValor = t.tipo === 'D' ? 'text-danger' : 'text-success';
+            const sinal = t.tipo === 'D' ? '-' : '';
+            const dataFormatada = new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR');
+
+            const row = `
+                <tr>
+                    <td class="text-muted" style="width: 120px;">${dataFormatada}</td>
+                    <td class="fw-bold text-dark">${t.descricao || '-'}</td>
+                    <td><span class="badge bg-light text-dark border">${t.categoria.nome}</span></td>
+                    <td class="small text-muted">${t.conta.nome}</td>
+                    <td class="text-end fw-bold ${classeValor}">
+                        ${sinal} ${valorFormatado}
+                    </td>
+                    <td class="text-center">
+                        <a href="/update/${t.id}/" class="btn btn-sm btn-link text-secondary"><i class="bi bi-pencil"></i></a>
+                        <a href="/delete/${t.id}/" class="btn btn-sm btn-link text-danger"><i class="bi bi-trash"></i></a>
+                    </td>
+                </tr>`;
+            tbody.innerHTML += row;
+        });
+    }
+
+    function renderizarGraficos(data) {
+        // Destrói gráficos antigos se existirem para evitar sobreposição
+        if (chartFluxo) chartFluxo.destroy();
+        if (chartReceitasCat) chartReceitasCat.destroy();
+        if (chartDespesasCat) chartDespesasCat.destroy();
+
+        // Gráfico de Fluxo (Barras)
+        chartFluxo = new Chart(document.getElementById("chartFluxo"), {
             type: 'bar',
             data: {
-                labels: {{ grafico_labels|safe }},
+                labels: data.grafico_labels,
                 datasets: [
-                    { label: 'Receitas', data: {{ grafico_receitas|safe }}, backgroundColor: '#198754', borderRadius: 4 },
-                    { label: 'Despesas', data: {{ grafico_despesas|safe }}, backgroundColor: '#dc3545', borderRadius: 4 }
+                    { label: 'Receitas', data: data.grafico_receitas, backgroundColor: '#198754', borderRadius: 4 },
+                    { label: 'Despesas', data: data.grafico_despesas, backgroundColor: '#dc3545', borderRadius: 4 }
                 ]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true }, x: { grid: { display: false } } }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } }
+        });
+
+        // Gráfico de Receitas (Rosca)
+        chartReceitasCat = new Chart(document.getElementById("chartReceitasCat"), {
+            type: 'doughnut',
+            data: {
+                labels: data.cat_receitas_labels,
+                datasets: [{ data: data.cat_receitas_data, backgroundColor: ['#20c997', '#198754', '#0f5132', '#75b798', '#a3cfbb'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+
+        // Gráfico de Despesas (Rosca)
+        chartDespesasCat = new Chart(document.getElementById("chartDespesasCat"), {
+            type: 'doughnut',
+            data: {
+                labels: data.cat_despesas_labels,
+                datasets: [{ data: data.cat_despesas_data, backgroundColor: ['#dc3545', '#b02a37', '#842029', '#ea868f', '#f1aeb5'], borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+        });
+    }
+
+    // --- 3. LÓGICA DE AUTENTICAÇÃO E DADOS ---
+
+    // Funções para manipular os tokens no localStorage
+    function getAccessToken() { return localStorage.getItem('accessToken'); }
+    function getRefreshToken() { return localStorage.getItem('refreshToken'); }
+    function setTokens(access, refresh) {
+        localStorage.setItem('accessToken', access);
+        if (refresh) {
+            localStorage.setItem('refreshToken', refresh);
+        }
+    }
+    function logout() {
+        localStorage.removeItem('accessToken');
+        localStorage.removeItem('refreshToken');
+        window.location.href = "{% url 'login' %}?next=" + window.location.pathname;
+    }
+
+    // Função para tentar renovar o token
+    async function refreshToken() {
+        const refresh = getRefreshToken();
+        if (!refresh) return null;
+
+        try {
+            const response = await fetch("{% url 'token_refresh' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh: refresh })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setTokens(data.access, null); // Atualiza o access token
+                return data.access;
             }
+            return null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function fetchComAuth(url) {
+        let accessToken = getAccessToken();
+        if (!accessToken) {
+            logout();
+            return;
+        }
+
+        let response = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
         });
 
-        // --- 2. CONFIGURAÇÃO ROSCA RECEITAS ---
-        new Chart(document.getElementById("chartReceitasCat"), {
-            type: 'doughnut',
-            data: {
-                labels: {{ cat_receitas_labels|safe }},
-                datasets: [{
-                    data: {{ cat_receitas_data|safe }},
-                    backgroundColor: ['#20c997', '#198754', '#0f5132', '#75b798', '#a3cfbb'], // Tons de verde
-                    borderWidth: 0
-                }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-        });
+        if (response.status === 401) { // Token expirado
+            accessToken = await refreshToken();
+            if (accessToken) {
+                response = await fetch(url, {
+                    headers: { 'Authorization': `Bearer ${accessToken}` }
+                });
+            } else {
+                logout();
+                return;
+            }
+        }
+        return response;
+    }
 
-        // --- 3. CONFIGURAÇÃO ROSCA DESPESAS ---
-        new Chart(document.getElementById("chartDespesasCat"), {
-            type: 'doughnut',
-            data: {
-                labels: {{ cat_despesas_labels|safe }},
-                datasets: [{
-                    data: {{ cat_despesas_data|safe }},
-                    backgroundColor: ['#dc3545', '#b02a37', '#842029', '#ea868f', '#f1aeb5'], // Tons de vermelho
-                    borderWidth: 0
-                }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
-        });
-    });
+
+    async function buscarDados() {
+        loadingDiv.style.display = 'block';
+        conteudoDiv.style.visibility = 'hidden';
+
+        const ano = document.getElementById('filtroAno').value;
+        const mes = document.getElementById('filtroMes').value;
+        const anoInteiro = document.getElementById('chkAno').checked;
+        document.getElementById('filtroMes').disabled = anoInteiro;
+
+        const url = `{% url 'transacoes_api' %}?ano=${ano}&mes=${mes}&ano_inteiro=${anoInteiro}`;
+
+        try {
+            const response = await fetchComAuth(url);
+            if (!response || !response.ok) {
+                 throw new Error('Falha na autenticação ou erro de rede.');
+            }
+
+            const data = await response.json();
+            renderizarResumo(data);
+            renderizarTabela(data.transacoes);
+            renderizarGraficos(data);
+
+        } catch (error) {
+            console.error("Erro:", error);
+            document.getElementById('tabelaTransacoes').innerHTML = `<tr><td colspan="6" class="text-center py-5 text-danger">Ocorreu um erro ao carregar os dados.</td></tr>`;
+        } finally {
+            loadingDiv.style.display = 'none';
+            conteudoDiv.style.visibility = 'visible';
+        }
+    }
+
+    // --- 4. EVENTOS ---
+    filtrosForm.addEventListener('change', buscarDados);
+
+    if (!getAccessToken()) {
+        logout();
+    } else {
+       buscarDados();
+    }
+});
 </script>
 
 {% endblock %}

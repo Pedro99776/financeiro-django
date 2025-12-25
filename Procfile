@@ -1,2 +1,2 @@
 
-web: gunicorn AppFinanceiro\financeiro.wsgi
+web: gunicorn financeiro.wsgi

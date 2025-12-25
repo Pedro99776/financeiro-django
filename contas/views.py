@@ -13,67 +13,51 @@ from django.db.models import Sum
 from django.db.models.functions import TruncDay, TruncMonth
 import json
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from .serializers import TransacaoSerializer
 
-@login_required
-def listagem_transacoes(request):
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def transacoes_api(request):
     hoje = datetime.now()
 
-    # --- 1. LÓGICA DE FILTROS (CORRIGIDA) ---
+    # --- 1. LÓGICA DE FILTROS ---
+    eh_ano_inteiro = request.GET.get('ano_inteiro') == 'true'
 
-    # Verificamos se o formulário foi submetido pelo campo oculto 'filtro_ativo'
-    if 'filtro_ativo' in request.GET:
-        # Se o form foi enviado, olhamos o estado real do checkbox
-        # Se estiver marcado, vem 'on'. Se desmarcado, vem None (então vira False)
-        eh_ano_inteiro = (request.GET.get('ano_inteiro') == 'on')
-
-        # Salva a nova escolha na sessão
-        request.session['filtro_ano_inteiro'] = eh_ano_inteiro
-    else:
-        # Se não é submissão de form (ex: clicou no menu), pega da memória
-        eh_ano_inteiro = request.session.get('filtro_ano_inteiro', False)
-
-    # --- Filtros de Ano e Mês ---
     try:
         ano_filtrado = int(request.GET.get('ano'))
     except (TypeError, ValueError):
-        ano_filtrado = request.session.get('filtro_ano', hoje.year)
+        ano_filtrado = hoje.year
 
     try:
         mes_filtrado = int(request.GET.get('mes'))
     except (TypeError, ValueError):
-        mes_filtrado = request.session.get('filtro_mes', hoje.month)
-
-    # Atualiza sessão
-    request.session['filtro_ano'] = ano_filtrado
-    request.session['filtro_mes'] = mes_filtrado
+        mes_filtrado = hoje.month
 
     # --- 2. QUERYSET PRINCIPAL ---
-    transacoes = Transacao.objects.filter(
+    transacoes_qs = Transacao.objects.select_related('categoria', 'conta').filter(
         data__year=ano_filtrado,
         conta__usuario=request.user
-    ).order_by('-data')  # Ordem cronológica inversa para o extrato
+    ).order_by('-data')
 
-    # Se NÃO for ano inteiro, aplica o filtro de mês
     if not eh_ano_inteiro:
-        transacoes = transacoes.filter(data__month=mes_filtrado)
+        transacoes_qs = transacoes_qs.filter(data__month=mes_filtrado)
 
     # --- 3. CÁLCULOS TOTAIS ---
-    total_receitas = transacoes.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
-    total_despesas = transacoes.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+    total_receitas = transacoes_qs.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+    total_despesas = transacoes_qs.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
     saldo = total_receitas - total_despesas
 
     # --- 4. DADOS PARA GRÁFICO DE FLUXO (BARRA) ---
-    grafico_labels = []
-    grafico_receitas = []
-    grafico_despesas = []
-
-    # Agrupamento Inteligente (Dia ou Mês)
     if eh_ano_inteiro:
-        dados_agrupados = transacoes.annotate(periodo=TruncMonth('data')).values('periodo', 'tipo').annotate(
+        dados_agrupados = transacoes_qs.annotate(periodo=TruncMonth('data')).values('periodo', 'tipo').annotate(
             total=Sum('valor')).order_by('periodo')
         formato_data = "%b"
     else:
-        dados_agrupados = transacoes.annotate(periodo=TruncDay('data')).values('periodo', 'tipo').annotate(
+        dados_agrupados = transacoes_qs.annotate(periodo=TruncDay('data')).values('periodo', 'tipo').annotate(
             total=Sum('valor')).order_by('periodo')
         formato_data = "%d"
 
@@ -85,41 +69,49 @@ def listagem_transacoes(request):
         if label not in dados_dict: dados_dict[label] = {'R': 0, 'D': 0}
         dados_dict[label][tipo] = valor
 
-    for label in sorted(dados_dict.keys()):
-        grafico_labels.append(label)
-        grafico_receitas.append(dados_dict[label]['R'])
-        grafico_despesas.append(dados_dict[label]['D'])
+    grafico_labels = sorted(dados_dict.keys())
+    grafico_receitas = [dados_dict[label]['R'] for label in grafico_labels]
+    grafico_despesas = [dados_dict[label]['D'] for label in grafico_labels]
+
 
     # --- 5. DADOS PARA GRÁFICOS DE ROSCA (CATEGORIAS) ---
-    # Receitas por Categoria
-    rec_cat = transacoes.filter(tipo='R').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')
+    rec_cat = transacoes_qs.filter(tipo='R').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')
     cat_receitas_labels = [item['categoria__nome'] for item in rec_cat]
     cat_receitas_data = [float(item['total']) for item in rec_cat]
 
-    # Despesas por Categoria
-    desp_cat = transacoes.filter(tipo='D').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')
+    desp_cat = transacoes_qs.filter(tipo='D').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')
     cat_despesas_labels = [item['categoria__nome'] for item in desp_cat]
     cat_despesas_data = [float(item['total']) for item in desp_cat]
 
-    return render(request, 'contas/listagem.html', {
-        'transacoes': transacoes,
+    # --- 6. SERIALIZER E RESPOSTA ---
+    serializer = TransacaoSerializer(transacoes_qs, many=True)
+
+    return Response({
+        'transacoes': serializer.data,
         'saldo': saldo,
         'total_receitas': total_receitas,
         'total_despesas': total_despesas,
-        'mes_atual': mes_filtrado,
-        'ano_atual': ano_filtrado,
-        'eh_ano_inteiro': eh_ano_inteiro,  # Variável para controlar o checkbox
-
-        # JSONs para os Gráficos
-        'grafico_labels': json.dumps(grafico_labels),
-        'grafico_receitas': json.dumps(grafico_receitas),
-        'grafico_despesas': json.dumps(grafico_despesas),
-        'cat_receitas_labels': json.dumps(cat_receitas_labels),
-        'cat_receitas_data': json.dumps(cat_receitas_data),
-        'cat_despesas_labels': json.dumps(cat_despesas_labels),
-        'cat_despesas_data': json.dumps(cat_despesas_data),
+        'grafico_labels': grafico_labels,
+        'grafico_receitas': grafico_receitas,
+        'grafico_despesas': grafico_despesas,
+        'cat_receitas_labels': cat_receitas_labels,
+        'cat_receitas_data': cat_receitas_data,
+        'cat_despesas_labels': cat_despesas_labels,
+        'cat_despesas_data': cat_despesas_data,
     })
 
+
+@login_required
+def listagem_transacoes(request):
+    # A view agora apenas renderiza o template base.
+    # O JavaScript no frontend será responsável por chamar a API e preencher os dados.
+    hoje = datetime.now()
+    contexto = {
+        'ano_atual': hoje.year,
+        'mes_atual': hoje.month,
+        'eh_ano_inteiro': request.session.get('filtro_ano_inteiro', False)
+    }
+    return render(request, 'contas/listagem.html', contexto)
 
 
 @login_required

@@ -2,42 +2,82 @@
 
 {% block content %}
 <div class="row justify-content-center mt-5">
-    <div class="col-md-4">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center">
-                <h4 class="mb-0"><i class="bi bi-person-lock"></i> Acesso Restrito</h4>
-            </div>
-            <div class="card-body p-4">
-                
-                <form method="post">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Login</h2>
+
+                <div id="error-container"></div>
+
+                <form id="loginForm" method="post" action="{% url 'login' %}">
                     {% csrf_token %}
-                    
-                    {% if form.errors %}
-                        <div class="alert alert-danger py-2 small">
-                            Usuário ou senha incorretos.
-                        </div>
-                    {% endif %}
-
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Usuário</label>
-                        <input type="text" name="username" class="form-control" placeholder="Digite seu usuário" required autofocus>
+                        <label for="id_username" class="form-label">Usuário</label>
+                        <input type="text" name="username" autofocus autocapitalize="none" autocomplete="username" maxlength="150" class="form-control" required id="id_username">
                     </div>
-
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Senha</label>
-                        <input type="password" name="password" class="form-control" placeholder="********" required>
+                        <label for="id_password" class="form-label">Senha</label>
+                        <input type="password" name="password" autocomplete="current-password" class="form-control" required id="id_password">
                     </div>
-
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-primary">Entrar</button>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Login</button>
                     </div>
+                    <input type="hidden" name="next" value="{{ next }}">
                 </form>
-
-            </div>
-            <div class="card-footer text-center bg-light small">
-                Sistema de Controle Financeiro
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    const errorContainer = document.getElementById('error-container');
+
+    loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault(); // Impede o envio tradicional do formulário
+
+        const username = e.target.username.value;
+        const password = e.target.password.value;
+        const nextUrl = e.target.next.value || '/';
+
+        errorContainer.innerHTML = ''; // Limpa erros antigos
+
+        try {
+            // 1. Tenta obter os tokens da API
+            const response = await fetch("{% url 'token_obtain_pair' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username: username, password: password })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+
+                // 2. Salva os tokens no localStorage
+                localStorage.setItem('accessToken', data.access);
+                localStorage.setItem('refreshToken', data.refresh);
+
+                // 3. Redireciona para a página principal (ou 'next' url)
+                window.location.href = nextUrl;
+
+            } else {
+                // Mostra um erro se o login falhar
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger mt-3';
+                errorDiv.textContent = 'Usuário ou senha inválidos.';
+                errorContainer.appendChild(errorDiv);
+            }
+        } catch (error) {
+            console.error('Erro ao fazer login:', error);
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger mt-3';
+            errorDiv.textContent = 'Ocorreu um erro de conexão.';
+            errorContainer.appendChild(errorDiv);
+        }
+    });
+});
+</script>
 {% endblock %}

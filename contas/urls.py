@@ -10,4 +10,5 @@ urlpatterns = [
     path('importar/', views.importar_extrato, name='importar_extrato'),
     path('nova-transacao/', views.nova_transacao, name='nova_transacao'),
 
+    path('api/transacoes/', views.transacoes_api, name='transacoes_api'),
 ]
