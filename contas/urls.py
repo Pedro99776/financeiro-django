@@ -1,3 +1,4 @@
+from django.contrib.auth.views import LogoutView
 from django.urls import path
 from . import views
 
@@ -9,6 +10,7 @@ urlpatterns = [
     path('nova-conta/', views.nova_conta, name='nova_conta'),
     path('importar/', views.importar_extrato, name='importar_extrato'),
     path('nova-transacao/', views.nova_transacao, name='nova_transacao'),
+    path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
 
     path('api/transacoes/', views.transacoes_api, name='transacoes_api'),
 ]

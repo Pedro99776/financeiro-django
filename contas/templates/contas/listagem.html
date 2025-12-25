@@ -131,7 +131,7 @@ document.addEventListener("DOMContentLoaded", function() {
     const loadingDiv = document.getElementById('loading');
     const conteudoDiv = document.getElementById('conteudo');
 
-    let chartFluxo, chartReceitasCat, chartDespesasCat; // Variáveis para guardar as instâncias dos gráficos
+    let chartFluxo, chartReceitasCat, chartDespesasCat;
 
     // --- 2. FUNÇÕES DE RENDERIZAÇÃO ---
     function formatarMoeda(valor) {
@@ -148,7 +148,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function renderizarTabela(transacoes) {
         const tbody = document.getElementById('tabelaTransacoes');
-        tbody.innerHTML = ''; // Limpa a tabela
+        tbody.innerHTML = '';
 
         if (transacoes.length === 0) {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted">Nenhuma transação encontrada.</td></tr>`;
@@ -180,12 +180,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderizarGraficos(data) {
-        // Destrói gráficos antigos se existirem para evitar sobreposição
         if (chartFluxo) chartFluxo.destroy();
         if (chartReceitasCat) chartReceitasCat.destroy();
         if (chartDespesasCat) chartDespesasCat.destroy();
 
-        // Gráfico de Fluxo (Barras)
         chartFluxo = new Chart(document.getElementById("chartFluxo"), {
             type: 'bar',
             data: {
@@ -198,7 +196,6 @@ document.addEventListener("DOMContentLoaded", function() {
             options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } }
         });
 
-        // Gráfico de Receitas (Rosca)
         chartReceitasCat = new Chart(document.getElementById("chartReceitasCat"), {
             type: 'doughnut',
             data: {
@@ -208,7 +205,6 @@ document.addEventListener("DOMContentLoaded", function() {
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
         });
 
-        // Gráfico de Despesas (Rosca)
         chartDespesasCat = new Chart(document.getElementById("chartDespesasCat"), {
             type: 'doughnut',
             data: {
@@ -219,70 +215,23 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    // --- 3. LÓGICA DE AUTENTICAÇÃO E DADOS ---
+    // --- 3. BUSCAR DADOS (VERSÃO SEGURA - SEM JWT) ---
 
-    // Funções para manipular os tokens no localStorage
-    function getAccessToken() { return localStorage.getItem('accessToken'); }
-    function getRefreshToken() { return localStorage.getItem('refreshToken'); }
-    function setTokens(access, refresh) {
-        localStorage.setItem('accessToken', access);
-        if (refresh) {
-            localStorage.setItem('refreshToken', refresh);
-        }
-    }
-    function logout() {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('refreshToken');
-        window.location.href = "{% url 'login' %}?next=" + window.location.pathname;
-    }
-
-    // Função para tentar renovar o token
-    async function refreshToken() {
-        const refresh = getRefreshToken();
-        if (!refresh) return null;
-
-        try {
-            const response = await fetch("{% url 'token_refresh' %}", {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh: refresh })
-            });
-            if (response.ok) {
-                const data = await response.json();
-                setTokens(data.access, null); // Atualiza o access token
-                return data.access;
-            }
-            return null;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    async function fetchComAuth(url) {
-        let accessToken = getAccessToken();
-        if (!accessToken) {
-            logout();
-            return;
-        }
-
-        let response = await fetch(url, {
-            headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-
-        if (response.status === 401) { // Token expirado
-            accessToken = await refreshToken();
-            if (accessToken) {
-                response = await fetch(url, {
-                    headers: { 'Authorization': `Bearer ${accessToken}` }
-                });
-            } else {
-                logout();
-                return;
+    // ✅ Pega o CSRF token do cookie (Django injeta automaticamente)
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
             }
         }
-        return response;
+        return cookieValue;
     }
-
 
     async function buscarDados() {
         loadingDiv.style.display = 'block';
@@ -296,9 +245,25 @@ document.addEventListener("DOMContentLoaded", function() {
         const url = `{% url 'transacoes_api' %}?ano=${ano}&mes=${mes}&ano_inteiro=${anoInteiro}`;
 
         try {
-            const response = await fetchComAuth(url);
-            if (!response || !response.ok) {
-                 throw new Error('Falha na autenticação ou erro de rede.');
+            // ✅ FETCH SEGURO: Usa cookie de sessão automaticamente
+            // Não precisa de Authorization header, o navegador envia o cookie sessionid
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken'),  // CSRF protection
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'same-origin'  // ✅ IMPORTANTE: Envia cookies
+            });
+
+            if (response.status === 403) {
+                // Se não estiver autenticado, redireciona para login
+                window.location.href = "{% url 'login' %}?next=" + window.location.pathname;
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error(`Erro HTTP: ${response.status}`);
             }
 
             const data = await response.json();
@@ -307,8 +272,11 @@ document.addEventListener("DOMContentLoaded", function() {
             renderizarGraficos(data);
 
         } catch (error) {
-            console.error("Erro:", error);
-            document.getElementById('tabelaTransacoes').innerHTML = `<tr><td colspan="6" class="text-center py-5 text-danger">Ocorreu um erro ao carregar os dados.</td></tr>`;
+            console.error("Erro ao buscar dados:", error);
+            document.getElementById('tabelaTransacoes').innerHTML =
+                `<tr><td colspan="6" class="text-center py-5 text-danger">
+                    Ocorreu um erro ao carregar os dados. Tente recarregar a página.
+                </td></tr>`;
         } finally {
             loadingDiv.style.display = 'none';
             conteudoDiv.style.visibility = 'visible';
@@ -318,11 +286,8 @@ document.addEventListener("DOMContentLoaded", function() {
     // --- 4. EVENTOS ---
     filtrosForm.addEventListener('change', buscarDados);
 
-    if (!getAccessToken()) {
-        logout();
-    } else {
-       buscarDados();
-    }
+    // Carrega os dados ao abrir a página
+    buscarDados();
 });
 </script>
 

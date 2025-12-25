@@ -38,9 +38,10 @@ def transacoes_api(request):
         mes_filtrado = hoje.month
 
     # --- 2. QUERYSET PRINCIPAL ---
+    # ✅ SEGURANÇA: Filtra apenas transações das contas do usuário logado
     transacoes_qs = Transacao.objects.select_related('categoria', 'conta').filter(
         data__year=ano_filtrado,
-        conta__usuario=request.user
+        conta__usuario=request.user  # ✅ FILTRO CRÍTICO
     ).order_by('-data')
 
     if not eh_ano_inteiro:
@@ -72,7 +73,6 @@ def transacoes_api(request):
     grafico_labels = sorted(dados_dict.keys())
     grafico_receitas = [dados_dict[label]['R'] for label in grafico_labels]
     grafico_despesas = [dados_dict[label]['D'] for label in grafico_labels]
-
 
     # --- 5. DADOS PARA GRÁFICOS DE ROSCA (CATEGORIAS) ---
     rec_cat = transacoes_qs.filter(tipo='R').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')
@@ -117,70 +117,97 @@ def listagem_transacoes(request):
 @login_required
 def nova_transacao(request):
     if request.method == 'POST':
-        form = TransacaoForm(request.POST)
+        # ✅ CORREÇÃO: Passa o usuário para o form
+        form = TransacaoForm(request.POST, user=request.user)
         if form.is_valid():
             transacao = form.save(commit=False)
-            # Se não tiver descrição, a gente coloca um tracinho ou deixa vazio
             if not transacao.descricao:
                 transacao.descricao = "Sem descrição"
             transacao.save()
             messages.success(request, "Transação adicionada com sucesso!")
             return redirect('listagem')
     else:
-        form = TransacaoForm()
+        # ✅ CORREÇÃO: Passa o usuário para o form
+        form = TransacaoForm(user=request.user)
 
     return render(request, 'contas/form_transacao.html', {'form': form})
 
 
 @login_required
 def update_transacao(request, pk):
-    transacao = get_object_or_404(Transacao, pk=pk)
-    form = TransacaoForm(request.POST or None, instance=transacao)
-    if form.is_valid():
-        form.save()
-        return redirect('listagem')
+    # ✅ SEGURANÇA: Garante que só pode editar transações próprias
+    transacao = get_object_or_404(Transacao, pk=pk, conta__usuario=request.user)
+
+    if request.method == 'POST':
+        form = TransacaoForm(request.POST, instance=transacao, user=request.user)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Transação atualizada com sucesso!")
+            return redirect('listagem')
+    else:
+        form = TransacaoForm(instance=transacao, user=request.user)
+
     return render(request, 'contas/form.html', {'form': form})
+
 
 @login_required
 def delete_transacao(request, pk):
-    transacao = get_object_or_404(Transacao, pk=pk)
+    # ✅ SEGURANÇA: Garante que só pode deletar transações próprias
+    transacao = get_object_or_404(Transacao, pk=pk, conta__usuario=request.user)
     transacao.delete()
+    messages.success(request, "Transação excluída com sucesso!")
     return redirect('listagem')
+
 
 @login_required
 def nova_categoria(request):
-    form = CategoriaForm(request.POST or None)
-    if form.is_valid():
-        categoria = form.save(commit=False)
-        categoria.usuario = request.user # Associa ao usuário logado
-        categoria.save()
-        return redirect('listagem') # Volta pra home
+    if request.method == 'POST':
+        form = CategoriaForm(request.POST)
+        if form.is_valid():
+            categoria = form.save(commit=False)
+            categoria.usuario = request.user  # ✅ ASSOCIA AO USUÁRIO LOGADO
+            categoria.save()
+            messages.success(request, "Categoria criada com sucesso!")
+            return redirect('listagem')
+    else:
+        form = CategoriaForm()
+
     return render(request, 'contas/form_generico.html', {'form': form, 'titulo': 'Nova Categoria'})
+
 
 @login_required
 def nova_conta(request):
-    form = ContaForm(request.POST or None)
-    if form.is_valid():
-        conta = form.save(commit=False)
-        conta.usuario = request.user
-        conta.save()
-        return redirect('listagem')
+    if request.method == 'POST':
+        form = ContaForm(request.POST)
+        if form.is_valid():
+            conta = form.save(commit=False)
+            conta.usuario = request.user  # ✅ ASSOCIA AO USUÁRIO LOGADO
+            conta.save()
+            messages.success(request, "Conta criada com sucesso!")
+            return redirect('listagem')
+    else:
+        form = ContaForm()
+
     return render(request, 'contas/form_generico.html', {'form': form, 'titulo': 'Nova Conta'})
 
 
 @login_required
 def importar_extrato(request):
-    # Busca todas as categorias do usuário para passar pra IA e pro Dropdown
+    # ✅ SEGURANÇA: Busca apenas categorias do usuário logado
     categorias = Categoria.objects.filter(usuario=request.user)
 
     if request.method == 'POST':
 
         # --- CENÁRIO 1: USUÁRIO ENVIOU O ARQUIVO PDF ---
         if 'arquivo' in request.FILES:
-            form = UploadFileForm(request.POST, request.FILES)
+            # ✅ CORREÇÃO: Passa o usuário para o form
+            form = UploadFileForm(request.POST, request.FILES, user=request.user)
             if form.is_valid():
                 arquivo = request.FILES['arquivo']
-                conta_id = request.POST.get('conta')  # Pega o ID da conta escolhida
+                conta_id = request.POST.get('conta')
+
+                # ✅ SEGURANÇA: Valida que a conta pertence ao usuário
+                conta = get_object_or_404(Conta, id=conta_id, usuario=request.user)
 
                 # Prepara lista de nomes para a IA
                 nomes_categorias = [c.nome for c in categorias]
@@ -193,28 +220,24 @@ def importar_extrato(request):
                         messages.error(request, "A IA não encontrou transações ou houve um erro.")
                         return redirect('importar_extrato')
 
-                    # SALVA NA SESSÃO (MEMÓRIA TEMPORÁRIA)
-                    # Convertemos para lista de dicts simples para o Django conseguir salvar na sessão
+                    # Serializa dados para a sessão
                     dados_serializaveis = []
                     for item in dados_brutos:
                         item_copy = item.copy()
-                        # Se 'data' for um objeto date/datetime, converte para string
                         if isinstance(item_copy.get('data'), (date, datetime)):
                             item_copy['data'] = item_copy['data'].strftime('%Y-%m-%d')
                         dados_serializaveis.append(item_copy)
 
                     request.session['transacoes_temp'] = dados_serializaveis
-
                     request.session['conta_temp_id'] = conta_id
 
                     messages.info(request, "Analise os dados abaixo antes de confirmar.")
 
-                    # Retorna a mesma página, mas agora com a flag 'preview' ativada
                     return render(request, 'contas/importar.html', {
                         'form': form,
                         'preview': True,
-                        'transacoes_temp': dados_brutos,
-                        'categorias': categorias  # Para preencher o select
+                        'transacoes_temp': dados_serializaveis,
+                        'categorias': categorias
                     })
 
                 except Exception as e:
@@ -224,32 +247,30 @@ def importar_extrato(request):
         # --- CENÁRIO 2: USUÁRIO CLICOU EM "CONFIRMAR IMPORTAÇÃO" ---
         elif 'confirmar_dados' in request.POST:
             conta_id = request.session.get('conta_temp_id')
+
+            # ✅ SEGURANÇA: Valida que a conta pertence ao usuário
             conta = get_object_or_404(Conta, id=conta_id, usuario=request.user)
 
-            # Pega as listas de dados enviadas pelo formulário da tabela
             lista_datas = request.POST.getlist('data')
             lista_descricoes = request.POST.getlist('descricao')
             lista_valores = request.POST.getlist('valor')
             lista_tipos = request.POST.getlist('tipo')
-            lista_categorias = request.POST.getlist('categoria')  # IDs das categorias
+            lista_categorias = request.POST.getlist('categoria')
 
             count = 0
             try:
-                # Itera pelos índices (0, 1, 2...)
                 for i in range(len(lista_datas)):
                     cat_id = lista_categorias[i]
 
                     if cat_id:
-                        # Usuário escolheu uma categoria no dropdown
-                        categoria = Categoria.objects.get(id=cat_id, usuario=request.user)
+                        # ✅ SEGURANÇA: Valida que a categoria pertence ao usuário
+                        categoria = get_object_or_404(Categoria, id=cat_id, usuario=request.user)
                     else:
-                        # Se vazio, usa "Importados" como fallback
                         categoria, _ = Categoria.objects.get_or_create(
                             nome="Importados",
                             usuario=request.user
                         )
 
-                    # Cria a transação
                     Transacao.objects.create(
                         data=lista_datas[i],
                         descricao=lista_descricoes[i],
@@ -261,8 +282,10 @@ def importar_extrato(request):
                     count += 1
 
                 # Limpa a sessão
-                if 'transacoes_temp' in request.session: del request.session['transacoes_temp']
-                if 'conta_temp_id' in request.session: del request.session['conta_temp_id']
+                if 'transacoes_temp' in request.session:
+                    del request.session['transacoes_temp']
+                if 'conta_temp_id' in request.session:
+                    del request.session['conta_temp_id']
 
                 messages.success(request, f"{count} transações importadas com sucesso!")
                 return redirect('listagem')
@@ -273,11 +296,15 @@ def importar_extrato(request):
 
         # --- CENÁRIO 3: CANCELAR ---
         elif 'cancelar' in request.POST:
-            if 'transacoes_temp' in request.session: del request.session['transacoes_temp']
+            if 'transacoes_temp' in request.session:
+                del request.session['transacoes_temp']
+            if 'conta_temp_id' in request.session:
+                del request.session['conta_temp_id']
             messages.info(request, "Importação cancelada.")
             return redirect('importar_extrato')
 
     else:
-        form = UploadFileForm()
+        # ✅ CORREÇÃO: Passa o usuário para o form
+        form = UploadFileForm(user=request.user)
 
-    return render(request, 'contas/importar.html', {'form': form})
+    return render(request, 'contas/importar.html', {'form': form, 'categorias': categorias})
