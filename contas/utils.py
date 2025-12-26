@@ -1,9 +1,9 @@
-import google.genai as genai
+from google import genai
+from google.genai import types
 import os
 import json
 import tempfile
 from datetime import datetime
-from google.generativeai.types import HarmCategory, HarmBlockThreshold
 
 
 def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
@@ -12,28 +12,35 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
         print("ERRO: Chave API não encontrada.")
         return []
 
-    genai.configure(api_key=api_key)
+    # --- CONFIGURAÇÃO CLI DO NOVO SDK ---
+    client = genai.Client(api_key=api_key)
 
-    # --- CONFIGURAÇÃO ESTRITA: MODELO 2.0 ---
-    nome_modelo = 'gemini-2.5-flash'
-
-    try:
-        model = genai.GenerativeModel(nome_modelo)
-        print(f"--- Modelo Selecionado: {nome_modelo} ---")
-    except Exception as e:
-        print(f"Erro ao instanciar modelo {nome_modelo}: {e}")
-        return []
+    nome_modelo = 'gemini-2.5-flash' # Atualizado para o modelo mais recente compatível com o SDK novo
 
     # --- ARQUIVO TEMPORÁRIO ---
-    suffix = ".pdf"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+    # Detecta a extensão do arquivo enviado
+    ext = os.path.splitext(arquivo_upload.name)[1].lower()
+    if not ext:
+        ext = '.pdf' # Fallback
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp_file:
         for chunk in arquivo_upload.chunks():
             tmp_file.write(chunk)
         tmp_path = tmp_file.name
 
     try:
-        print(f"--- Enviando PDF ---")
-        sample_file = genai.upload_file(path=tmp_path, display_name="Extrato")
+        print(f"--- Enviando Arquivo ({ext}) ---")
+        
+        # Define MIME type correto
+        mime_type = 'application/pdf'
+        if ext in ['.jpg', '.jpeg']:
+            mime_type = 'image/jpeg'
+        elif ext == '.png':
+            mime_type = 'image/png'
+
+        # Upload usando o cliente da nova SDK
+        # O Client.files.upload retorna um objeto que pode ser passado pro generate_content
+        sample_file = client.files.upload(file=tmp_path, config=types.UploadFileConfig(display_name="Extrato", mime_type=mime_type))
 
         # FORMATE AS CATEGORIAS PARA O PROMPT
         # Opção A: Lista simples separada por vírgulas
@@ -54,9 +61,9 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
         Regras:
         1. Se a transação se encaixar claramente em uma categoria acima, use o nome EXATO dela.
         2. Se não tiver certeza ou não encaixar, use a categoria "Importados".
-        3. Converta datas para "YYYY-MM-DD".
+        3. Converta datas para "YYYY-MM-DD". se o ano não estiver explícito, assuma o ano atual.
         4. Ignore saldos diários.
-        5. Valor: float positivo (ex: 20.50).
+        5. Valor: float positivo (ex: 20.50). SE O VALOR NÃO ESTIVER CLARO, procure pelo número que aparece após "R$", geralmente está ao lado ou logo abaixo da descrição.
         6. Tipo: "D" (Débito) ou "R" (Crédito).
         7. Descricao: Limpe o texto.
 
@@ -72,25 +79,26 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
         ]
         """
 
-        # --- CONFIGURAÇÃO DE SEGURANÇA (CRÍTICO) ---
-        # Isso impede que o Google bloqueie o extrato por achar que é dado sensível
-        safety_settings = {
-            HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-        }
-
-        # Gera o conteúdo
-        response = model.generate_content(
-            [prompt, sample_file],
-            safety_settings=safety_settings
+        # --- ESTRATÉGIA DE GERAÇÃO ---
+        response = client.models.generate_content(
+            model=nome_modelo,
+            contents=[prompt, sample_file],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json", # Força JSON estruturado
+                safety_settings=[
+                    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                ]
+            )
         )
 
-        # --- DEBUG: Ver o que a IA respondeu antes de tentar ler JSON ---
-        print(f"DEBUG - Resposta Bruta da IA: {response.text}")
+        # --- DEBUG ---
+        print(f"DEBUG - Resposta da IA: {response.text}")
 
-        # Limpeza
+        # Com response_mime_type="application/json", o texto já deve vir limpo,
+        # mas mantemos uma limpeza defensiva básica
         texto = response.text.replace('```json', '').replace('```', '').strip()
 
         if not texto:
@@ -107,7 +115,7 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
                     print(f"⚠️ Item ignorado (campos faltando): {item}")
                     continue
 
-                # IMPORTANTE: Mantém a data como STRING (para ser JSON-serializável)
+                # Mantém data como string
                 data_str = item['data']
 
                 # Valida formato da data
@@ -136,9 +144,6 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
 
     except Exception as e:
         print(f"Erro na geração da IA: {e}")
-        # Se houver feedback de bloqueio, mostramos
-        if 'response' in locals() and hasattr(response, 'prompt_feedback'):
-            print(f"Feedback de bloqueio: {response.prompt_feedback}")
         return []
 
     finally:

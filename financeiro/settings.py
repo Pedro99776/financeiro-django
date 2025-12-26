@@ -17,7 +17,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ============================================
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-chave-padrao')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = ['*']  # ⚠️ Em produção, colocar domínio específico: ['seuapp.com']
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')  # ✅ Aceita lista do ambiente (ex: site.com,localhost)
+if not os.getenv('ALLOWED_HOSTS'):
+     # Fallback seguro para dev local se não houver variável explícita
+     ALLOWED_HOSTS = ['localhost', '127.0.0.1', '.onrender.com']
 
 # ============================================
 # APLICAÇÕES
@@ -82,11 +85,13 @@ if DATABASE_URL:
     DATABASES = {
         'default': dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=0,  # ✅ CRÍTICO: Deve ser 0 para Transaction Pooler (PgBouncer)
             conn_health_checks=True,
         )
     }
-    print("🚀 Conectando ao Supabase via Transaction Pooler")
+    # Explicação: O modo 'Transaction' do Supabase não suporta conexões persistentes
+    # do Django. Manter conn_max_age > 0 causa erros de "prepared statement does not exist".
+    print("🚀 Conectando ao Supabase via Transaction Pooler (conn_max_age=0)")
 else:
     # ✅ OPÇÃO 2: Montar manualmente (se não tiver DATABASE_URL)
     senha_banco = os.getenv('DB_PASSWORD')
@@ -103,11 +108,11 @@ else:
         DATABASES = {
             'default': dj_database_url.config(
                 default=DATABASE_URL_MANUAL,
-                conn_max_age=600,
+                conn_max_age=0,  # ✅ CRÍTICO: Deve ser 0 para Transaction Pooler
                 conn_health_checks=True,
             )
         }
-        print(f"🚀 Conectando ao Supabase: {os.getenv('DB_HOST')}:{db_port}")
+        print(f"🚀 Conectando ao Supabase: {os.getenv('DB_HOST')}:{db_port} (conn_max_age=0)")
     else:
         # Fallback para SQLite se não tiver credenciais
         DATABASES = {

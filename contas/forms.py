@@ -47,7 +47,10 @@ class ContaForm(forms.ModelForm):
 
 
 class UploadFileForm(forms.Form):
-    arquivo = forms.FileField(label="Selecione o Extrato (PDF)")
+    arquivo = forms.FileField(
+        label="Selecione o Extrato (PDF ou Imagem)",
+        widget=forms.ClearableFileInput(attrs={'accept': 'application/pdf, image/*'})
+    )
     conta = forms.ModelChoiceField(
         queryset=Conta.objects.none(),  # ✅ IMPORTANTE: Começa vazio
         label="Para qual conta?"
