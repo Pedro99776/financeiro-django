@@ -165,8 +165,8 @@ document.addEventListener("DOMContentLoaded", function() {
                 <tr>
                     <td class="text-muted" style="width: 120px;">${dataFormatada}</td>
                     <td class="fw-bold text-dark">${t.descricao || '-'}</td>
-                    <td><span class="badge bg-light text-dark border">${t.categoria.nome}</span></td>
-                    <td class="small text-muted">${t.conta.nome}</td>
+                    <td><span class="badge bg-light text-dark border">${t.categoria_nome}</span></td>
+                    <td class="small text-muted">${t.conta_nome}</td>
                     <td class="text-end fw-bold ${classeValor}">
                         ${sinal} ${valorFormatado}
                     </td>
@@ -285,6 +285,12 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // --- 4. EVENTOS ---
     filtrosForm.addEventListener('change', buscarDados);
+
+    // Evento customizado para atualização via Chatbot
+    document.addEventListener('transactionCreated', () => {
+        buscarDados();
+        // Feedback visual opcional (Toast ou similar)
+    });
 
     // Carrega os dados ao abrir a página
     buscarDados();

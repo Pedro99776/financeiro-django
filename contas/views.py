@@ -34,16 +34,26 @@ def chat_api(request):
     historico = request.session.get('chat_history', [])
 
     # Gera resposta usando o módulo chatbot.py
-    resposta_texto = gerar_resposta_chatbot(mensagem, request.user, historico)
+    resposta = gerar_resposta_chatbot(mensagem, request.user, historico)
 
-    # Atualiza histórico (User + AI)
-    historico.append({'role': 'user', 'content': mensagem})
-    historico.append({'role': 'assistant', 'content': resposta_texto})
-    
-    # Mantém apenas as últimas 20 mensagens para economizar sessão
-    request.session['chat_history'] = historico[-20:]
-    
-    return Response({'response': resposta_texto})
+    # Verifica se é uma proposta de ação (Dicionário) ou Texto simples
+    if isinstance(resposta, dict) and resposta.get('type') == 'action_proposal':
+        # Se for ação, mandamos o objeto completo para o frontend renderizar o card
+        # No histórico, salvamos o texto de fallback para manter a integridade da conversa
+        historico.append({'role': 'user', 'content': mensagem})
+        historico.append({'role': 'assistant', 'content': resposta.get('text_fallback', 'Proposta de transação gerada.')})
+        
+        # Atualiza sessão
+        request.session['chat_history'] = historico[-20:]
+        
+        return Response({'response': resposta, 'is_action': True})
+    else:
+        # Resposta de texto normal
+        historico.append({'role': 'user', 'content': mensagem})
+        historico.append({'role': 'assistant', 'content': resposta})
+        request.session['chat_history'] = historico[-20:]
+        
+        return Response({'response': resposta, 'is_action': False})
 
 
 @api_view(['POST'])

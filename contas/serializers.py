@@ -53,6 +53,7 @@ class TransacaoSerializer(serializers.ModelSerializer):
 
 class TransacaoCreateSerializer(serializers.Serializer):
     """Serializer otimizado para interação via chatbot / IA"""
+    id = serializers.IntegerField(read_only=True)
     descricao = serializers.CharField(max_length=200)
     valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
     tipo = serializers.ChoiceField(choices=[('D', 'Despesa'), ('R', 'Receita')])
@@ -70,6 +71,9 @@ class TransacaoCreateSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         """Cria transação com lookup inteligente de categoria/conta"""
+        # Remove usuario do validated_data para não quebrar o create (injetado pelo perform_create)
+        validated_data.pop('usuario', None)
+        
         usuario = self.context['request'].user
 
         # Buscar ou criar categoria

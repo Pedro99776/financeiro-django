@@ -56,41 +56,71 @@ Você NÃO pode fazer cálculos com dados que não foram fornecidos
 - Exemplo: clima, notícias, esportes → redirecionar para finanças
 - NUNCA invente informações sobre outros assuntos
 
-📌 REGRAS DE OURO:
-- Use EXATAMENTE os valores fornecidos (não invente números)
-- Se um dado não estiver disponível, seja honesto: "Não tenho essa informação no momento"
-- Formate valores monetários: R$ 1.234,56
-- Mantenha foco em finanças pessoais
+📌 REGRAS DE OURO PARA AGENTES (IMPORTANTE):
+- SE O USUÁRIO QUER CRIAR UMA TRANSAÇÃO (ex: "gastei", "recebi", "comprei", "pix"):
+  1. NÃO FAÇA PERGUNTAS DE CONFIRMAÇÃO.
+  2. NÃO PERGUNTE A CATEGORIA OU CONTA SE NÃO FORAM DITAS.
+  3. CHAME A FERRAMENTA `criar_transacao` IMEDIATAMENTE.
+  4. INFERIR DADOS FALTANTES:
+     - Se não disse categoria, CHUTE a mais provável (ex: "McDonalds" -> "Alimentação").
+     - Se não disse conta, envie STRING VAZIA "" (o sistema usará a padrão).
+     - Se não disse data, assuma HOJE.
+  5. O formulário visual servirá para confirmação. SUA FUNÇÃO É PREENCHER O RASCUNHO.
+
+- Use EXATAMENTE os valores fornecidos para o valor monetário.
+- Mantenha foco em finanças pessoais.
 """
 
-    # 3. Monta conversa com histórico
+    # 3. Definição de Ferramentas (Function Calling)
+    # Define a ferramenta para criar transações
+    ferramenta_criar_transacao = types.FunctionDeclaration(
+        name="criar_transacao",
+        description="Registra uma nova despesa ou receita. Chame isso quando o usuário mencionar qualquer atividade financeira (ex: comprei, paguei, recebi, fiz pix), mesmo sem palavras-chave explícitas.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "descricao": types.Schema(type="STRING", description="Descrição curta da transação (ex: Uber, Mercado, Salário)."),
+                "valor": types.Schema(type="NUMBER", description="Valor numérico da transação (ex: 50.00). Use positivo."),
+                "tipo": types.Schema(type="STRING", enum=["D", "R"], description="Tipo: 'D' para Despesa, 'R' para Receita"),
+                "categoria": types.Schema(type="STRING", description="Nome da categoria (ex: Transporte, Alimentação). OBRIGATÓRIO: Se não foi falado, INFERIR pelo contexto (ex: Uber -> Transporte)."),
+                "conta": types.Schema(type="STRING", description="Nome da conta (ex: Nubank, Carteira). Se não informado ou desconhecido, envie STRING VAZIA '' (para usar a conta padrão)."),
+                "data": types.Schema(type="STRING", description="Data no formato YYYY-MM-DD. OBRIGATÓRIO: Se o usuário disse 'ontem', 'hoje', 'terça passada', CALCULE baseando-se na data de referência fornecida.")
+            },
+            required=["descricao", "valor", "tipo", "data", "categoria"]
+        )
+    )
+    
+    tools = [types.Tool(function_declarations=[ferramenta_criar_transacao])]
+
+    # 4. Monta conversa com histórico
     contents = []
     
     # Adiciona últimas 5 trocas (10 mensagens) para contexto if historico
     if historico:
         for msg in historico[-10:]:
-            # Mapeia role 'assistant' (do frontend/app) para 'model' (do Gemini) se necessário
             role = 'user' if msg['role'] == 'user' else 'model'
-            contents.append(types.Content(
-                role=role,
-                parts=[types.Part.from_text(text=msg['content'])]
-            ))
+            # Se for uma mensagem de ação anterior, o conteúdo pode ser complexo. 
+            # Por simplificação, se não for string, ignoramos no histórico imediato
+            # ou convertemos para texto indicativo.
+            if isinstance(msg['content'], str):
+                contents.append(types.Content(
+                    role=role,
+                    parts=[types.Part.from_text(text=msg['content'])]
+                ))
     
     # Adiciona mensagem atual
     contents.append(types.Content(
         role='user', 
-        parts=[types.Part.from_text(text=mensagem_usuario)]
+        parts=[types.Part.from_text(text=f"{mensagem_usuario} (Data de hoje para referência: {datetime.now().strftime('%Y-%m-%d')})")]
     ))
 
-    # 4. Chama Gemini
+    # 5. Chama Gemini com Tools
     try:
-        # Configuração do modelo
         generate_content_config = types.GenerateContentConfig(
             system_instruction=system_instruction,
-            temperature=0.7,
+            temperature=0.5, # Temperatura mediana para ser mais preciso nas funções
             max_output_tokens=500,
-            top_p=0.95,
-            top_k=40,
+            tools=tools, # ✅ Injeta as ferramentas
         )
 
         response = client.models.generate_content(
@@ -99,11 +129,36 @@ Você NÃO pode fazer cálculos com dados que não foram fornecidos
             config=generate_content_config
         )
         
+        # 6. Verifica se houve Chamada de Função
+        # No novo SDK, verificamos se há parts com function_call
+        if response.candidates and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if part.function_call:
+                    fc = part.function_call
+                    if fc.name == "criar_transacao":
+                        # Retorna um DICIONÁRIO estruturado para o frontend renderizar o card
+                        # Convertendo args (Map) para dict padrão
+                        args = {k: v for k, v in fc.args.items()}
+                        
+                        return {
+                            "type": "action_proposal",
+                            "action": "create_transaction",
+                            "data": {
+                                "descricao": args.get('descricao'),
+                                "valor": float(args.get('valor', 0)),
+                                "tipo": args.get('tipo'),
+                                "categoria": args.get('categoria', 'Importados'),
+                                "conta": args.get('conta', ''),
+                                "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
+                            },
+                            "text_fallback": f"Entendi. Vou preparar o lançamento de {args.get('descricao')} no valor de R$ {args.get('valor')}."
+                        }
+
+        # Se não houve function call, retorna o texto normal
         resposta_texto = response.text
         
-        # Validação básica de resposta
-        if not resposta_texto or len(resposta_texto.strip()) < 10:
-            return "Desculpe, tive dificuldade em processar sua pergunta. Pode reformular?"
+        if not resposta_texto or len(resposta_texto.strip()) < 2:
+            return "Desculpe, não entendi. Poderia repetir?"
         
         return resposta_texto
         
