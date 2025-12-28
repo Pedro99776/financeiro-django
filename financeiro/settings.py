@@ -112,7 +112,7 @@ else:
                 conn_health_checks=True,
             )
         }
-        print(f"🚀 Conectando ao Supabase: {os.getenv('DB_HOST')}:{db_port} (conn_max_age=0)")
+        print(f"Conectando ao Supabase: {os.getenv('DB_HOST')}:{db_port} (conn_max_age=0)")
     else:
         # Fallback para SQLite se não tiver credenciais
         DATABASES = {

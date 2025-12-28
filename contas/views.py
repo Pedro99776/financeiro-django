@@ -6,17 +6,52 @@ from django.db import IntegrityError
 from datetime import date, datetime
 
 from .models import Transacao, Categoria, Conta
-from .forms import TransacaoForm, CategoriaForm, ContaForm, UploadFileForm
+from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm
 from .utils import importar_extrato_com_ia
+from .serializers import TransacaoSerializer
+from .chatbot import gerar_resposta_chatbot, limpar_historico_chat
 
-from django.db.models import Sum
-from django.db.models.functions import TruncDay, TruncMonth
-import json
-
+# --- API VIEWS (DRF) ---
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .serializers import TransacaoSerializer
+from django.db.models import Sum
+from django.db.models.functions import TruncMonth, TruncDay
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def chat_api(request):
+    """
+    Endpoint para conversar com o Chatbot.
+    Mantém histórico na sessão do usuário.
+    """
+    mensagem = request.data.get('message')
+    if not mensagem:
+        return Response({'error': 'Mensagem vazia'}, status=400)
+
+    # Recupera histórico da sessão
+    historico = request.session.get('chat_history', [])
+
+    # Gera resposta usando o módulo chatbot.py
+    resposta_texto = gerar_resposta_chatbot(mensagem, request.user, historico)
+
+    # Atualiza histórico (User + AI)
+    historico.append({'role': 'user', 'content': mensagem})
+    historico.append({'role': 'assistant', 'content': resposta_texto})
+    
+    # Mantém apenas as últimas 20 mensagens para economizar sessão
+    request.session['chat_history'] = historico[-20:]
+    
+    return Response({'response': resposta_texto})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def limpar_historico_chat_api(request):
+    """Endpoint para limpar memória do chat"""
+    limpar_historico_chat(request.session)
+    return Response({'status': 'ok'})
 
 
 @api_view(['GET'])
@@ -36,6 +71,11 @@ def transacoes_api(request):
         mes_filtrado = int(request.GET.get('mes'))
     except (TypeError, ValueError):
         mes_filtrado = hoje.month
+
+    # ✅ PERSISTÊNCIA: Salva os filtros na sessão do usuário
+    request.session['filtro_ano'] = ano_filtrado
+    request.session['filtro_mes'] = mes_filtrado
+    request.session['filtro_ano_inteiro'] = eh_ano_inteiro
 
     # --- 2. QUERYSET PRINCIPAL ---
     # ✅ SEGURANÇA: Filtra apenas transações das contas do usuário logado
@@ -98,6 +138,8 @@ def transacoes_api(request):
         'cat_receitas_data': cat_receitas_data,
         'cat_despesas_labels': cat_despesas_labels,
         'cat_despesas_data': cat_despesas_data,
+        'cat_despesas_labels': cat_despesas_labels,
+        'cat_despesas_data': cat_despesas_data,
     })
 
 
@@ -106,10 +148,16 @@ def listagem_transacoes(request):
     # A view agora apenas renderiza o template base.
     # O JavaScript no frontend será responsável por chamar a API e preencher os dados.
     hoje = datetime.now()
+    
+    # ✅ UX: Recupera filtros da sessão ou usa defaults (Data atual)
+    ano_filtrado = request.session.get('filtro_ano', hoje.year)
+    mes_filtrado = request.session.get('filtro_mes', hoje.month)
+    eh_ano_inteiro = request.session.get('filtro_ano_inteiro', False)
+
     contexto = {
-        'ano_atual': hoje.year,
-        'mes_atual': hoje.month,
-        'eh_ano_inteiro': request.session.get('filtro_ano_inteiro', False)
+        'ano_atual': ano_filtrado,    # Nome da variável no template é 'ano_atual', mas agora reflete o filtro
+        'mes_atual': mes_filtrado,
+        'eh_ano_inteiro': eh_ano_inteiro
     }
     return render(request, 'contas/listagem.html', contexto)
 
