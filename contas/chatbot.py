@@ -62,7 +62,7 @@ Você NÃO pode fazer cálculos com dados que não foram fornecidos
   2. NÃO PERGUNTE A CATEGORIA OU CONTA SE NÃO FORAM DITAS.
   3. CHAME A FERRAMENTA `criar_transacao` IMEDIATAMENTE.
   4. INFERIR DADOS FALTANTES:
-     - Se não disse categoria, CHUTE a mais provável (ex: "McDonalds" -> "Alimentação").
+     - Se não disse categoria, CHUTE a mais provável (ex: "McDonalds" -> "Alimentação" ou "Uber" -> "Transporte").
      - Se não disse conta, envie STRING VAZIA "" (o sistema usará a padrão).
      - Se não disse data, assuma HOJE.
   5. O formulário visual servirá para confirmação. SUA FUNÇÃO É PREENCHER O RASCUNHO.

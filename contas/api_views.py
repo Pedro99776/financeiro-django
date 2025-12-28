@@ -107,7 +107,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         despesas = transacoes.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or Decimal('0.00')
         saldo = receitas - despesas
 
-        # Breakdown por categoria (solicitação #1)
+        # Breakdown por categoria
         por_categoria = {}
         gastos_cat = transacoes.filter(tipo='D').values(
             'categoria__nome'
@@ -144,7 +144,7 @@ class AnalyticsViewSet(viewsets.ViewSet):
         ).order_by('-total')
 
         total_despesas = sum(item['total'] for item in qs)
-        # Proteção contra divisão por zero (solicitação #4)
+        # Proteção contra divisão por zero
         total_divisor = total_despesas if total_despesas and total_despesas > 0 else Decimal('1.00')
 
         resultado = []
