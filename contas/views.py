@@ -16,7 +16,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Sum
-from django.db.models.functions import TruncMonth, TruncDay
+from django.db.models.functions import TruncMonth, TruncDay, ExtractMonth
 
 
 @api_view(['POST'])
@@ -104,25 +104,42 @@ def transacoes_api(request):
 
     # --- 4. DADOS PARA GRÁFICO DE FLUXO (BARRA) ---
     if eh_ano_inteiro:
-        dados_agrupados = transacoes_qs.annotate(periodo=TruncMonth('data')).values('periodo', 'tipo').annotate(
-            total=Sum('valor')).order_by('periodo')
-        formato_data = "%b"
+        # Inicializa os 12 meses com zero para garantir ordem cronológica (Jan -> Dez)
+        dados_dict = {m: {'R': 0, 'D': 0} for m in range(1, 13)}
+
+        # Agrupa por número do mês (1 a 12)
+        # Limpa ordenação (.order_by()) para garantir que o GROUP BY seja feito apenas pelo mês/tipo
+        dados_agrupados = transacoes_qs.order_by().annotate(mes_num=ExtractMonth('data')).values('mes_num', 'tipo').annotate(
+            total=Sum('valor'))
+
+        for item in dados_agrupados:
+            mes_idx = item['mes_num']
+            tipo = item['tipo']
+            valor = float(item['total'])
+            if mes_idx in dados_dict:
+                dados_dict[mes_idx][tipo] += valor
+
+        # Definição manual de labels para garantir PT-BR e ordem correta
+        meses_nomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+        grafico_labels = meses_nomes
+        grafico_receitas = [dados_dict[m]['R'] for m in range(1, 13)]
+        grafico_despesas = [dados_dict[m]['D'] for m in range(1, 13)]
     else:
-        dados_agrupados = transacoes_qs.annotate(periodo=TruncDay('data')).values('periodo', 'tipo').annotate(
+        dados_agrupados = transacoes_qs.order_by().annotate(periodo=TruncDay('data')).values('periodo', 'tipo').annotate(
             total=Sum('valor')).order_by('periodo')
         formato_data = "%d"
 
-    dados_dict = {}
-    for item in dados_agrupados:
-        label = item['periodo'].strftime(formato_data)
-        tipo = item['tipo']
-        valor = float(item['total'])
-        if label not in dados_dict: dados_dict[label] = {'R': 0, 'D': 0}
-        dados_dict[label][tipo] = valor
+        dados_dict_dias = {}
+        for item in dados_agrupados:
+            label = item['periodo'].strftime(formato_data)
+            tipo = item['tipo']
+            valor = float(item['total'])
+            if label not in dados_dict_dias: dados_dict_dias[label] = {'R': 0, 'D': 0}
+            dados_dict_dias[label][tipo] += valor
 
-    grafico_labels = sorted(dados_dict.keys())
-    grafico_receitas = [dados_dict[label]['R'] for label in grafico_labels]
-    grafico_despesas = [dados_dict[label]['D'] for label in grafico_labels]
+        grafico_labels = sorted(dados_dict_dias.keys())
+        grafico_receitas = [dados_dict_dias[label]['R'] for label in grafico_labels]
+        grafico_despesas = [dados_dict_dias[label]['D'] for label in grafico_labels]
 
     # --- 5. DADOS PARA GRÁFICOS DE ROSCA (CATEGORIAS) ---
     rec_cat = transacoes_qs.filter(tipo='R').values('categoria__nome').annotate(total=Sum('valor')).order_by('-total')

@@ -7,7 +7,7 @@ class TransacaoForm(forms.ModelForm):
         model = Transacao
         fields = ['data', 'descricao', 'valor', 'conta', 'categoria', 'tipo']
         widgets = {
-            'data': forms.DateInput(attrs={'type': 'date'}),
+            'data': forms.DateInput(attrs={'type': 'date'}, format='%Y-%m-%d'),
             'descricao': forms.Textarea(attrs={'rows': 3}),
         }
 

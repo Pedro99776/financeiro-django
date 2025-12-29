@@ -38,9 +38,7 @@
             </div>
         </div>
         <div class="col text-end">
-            <a href="{% url 'nova_transacao' %}" class="btn btn-primary btn-sm">
-                <i class="bi bi-plus-lg"></i> Adicionar
-            </a>
+             <!-- Botão Adicionar movido para Navbar/Extrato -->
         </div>
     </form>
 
@@ -99,8 +97,11 @@
 
         <!-- Tabela de Transações -->
         <div class="card shadow-sm border-0 mb-5">
-            <div class="card-header bg-white py-3">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
                 <h5 class="m-0 font-weight-bold text-dark"><i class="bi bi-list-ul"></i> Extrato Detalhado</h5>
+                <a href="{% url 'nova_transacao' %}" class="btn btn-primary btn-sm">
+                    <i class="bi bi-plus-lg"></i> Adicionar Transação
+                </a>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">

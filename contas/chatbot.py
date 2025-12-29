@@ -74,6 +74,21 @@ FERRAMENTAS DISPONÍVEIS:
    Quando: "delete conta X"
    Ação: Busque ID de X → CHAME excluir_conta(id=ID)
 
+8. consultar_maiores_gastos
+   Quando: "maiores gastos", "top gastos", "top 5 gastos", "onde mais gastei"
+   Ação: CHAME consultar_maiores_gastos(ano=YYYY, mes=MM, limit=N)
+   Exemplo: "top 5 gastos de 2025" → consultar_maiores_gastos(ano=2025, limit=5)
+
+9. consultar_categoria_mais_gasta
+   Quando: "qual categoria mais gastei", "categoria que mais gasto", "onde mais gasto"
+   Ação: CHAME consultar_categoria_mais_gasta(ano=YYYY, mes=MM)
+   Exemplo: "qual categoria mais gastei em 2025?" → consultar_categoria_mais_gasta(ano=2025)
+
+10. consultar_gastos_por_categoria
+    Quando: "gastos por categoria", "quanto gastei em cada categoria", "distribuição de gastos"
+    Ação: CHAME consultar_gastos_por_categoria(ano=YYYY, mes=MM)
+    Exemplo: "gastos por categoria em 2025" → consultar_gastos_por_categoria(ano=2025)
+
 REGRAS:
 - NÃO peça confirmação (formulário faz isso)
 - SEMPRE use IDs do contexto para editar/excluir
@@ -169,11 +184,53 @@ VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
         parameters=types.Schema(type="OBJECT", properties={"id": types.Schema(type="INTEGER", description="ID da conta")}, required=["id"])
     )
     
+    # --- TOOLS ANALÍTICAS ---
+    ferramenta_top_gastos = types.FunctionDeclaration(
+        name="consultar_maiores_gastos",
+        description="Retorna os maiores gastos de um período. Use quando usuário perguntar 'maiores gastos', 'top gastos', 'onde mais gastei'.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "ano": types.Schema(type="INTEGER", description="Ano para consulta (ex: 2025)"),
+                "mes": types.Schema(type="INTEGER", description="Mês (1-12). Opcional. Se não informado, busca o ano todo."),
+                "limit": types.Schema(type="INTEGER", description="Quantos resultados retornar (padrão: 5)")
+            },
+            required=["ano"]
+        )
+    )
+
+    ferramenta_categoria_mais_gasta = types.FunctionDeclaration(
+        name="consultar_categoria_mais_gasta",
+        description="Retorna qual categoria teve mais gastos no período.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "ano": types.Schema(type="INTEGER", description="Ano"),
+                "mes": types.Schema(type="INTEGER", description="Mês (opcional)")
+            },
+            required=["ano"]
+        )
+    )
+
+    ferramenta_gastos_por_categoria = types.FunctionDeclaration(
+        name="consultar_gastos_por_categoria",
+        description="Retorna total gasto em cada categoria do período.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "ano": types.Schema(type="INTEGER", description="Ano"),
+                "mes": types.Schema(type="INTEGER", description="Mês (opcional)")
+            },
+            required=["ano"]
+        )
+    )
+
     tools = [
         types.Tool(function_declarations=[
             ferramenta_criar_transacao,
             ferramenta_criar_categoria, ferramenta_editar_categoria, ferramenta_excluir_categoria,
-            ferramenta_criar_conta, ferramenta_editar_conta, ferramenta_excluir_conta
+            ferramenta_criar_conta, ferramenta_editar_conta, ferramenta_excluir_conta,
+            ferramenta_top_gastos, ferramenta_categoria_mais_gasta, ferramenta_gastos_por_categoria
         ])
     ]
 
@@ -204,7 +261,7 @@ VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
         generate_content_config = types.GenerateContentConfig(
             system_instruction=system_instruction,
             temperature=0.5, # Temperatura mediana para ser mais preciso nas funções
-            max_output_tokens=500,
+            max_output_tokens=1000, # Aumentado para suportar respostas analíticas
             tools=tools, # ✅ Injeta as ferramentas
         )
 
@@ -220,70 +277,68 @@ VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
             for part in response.candidates[0].content.parts:
                 if part.function_call:
                     fc = part.function_call
-                    if fc.name == "criar_transacao":
-                        # Retorna um DICIONÁRIO estruturado para o frontend renderizar o card
-                        # Convertendo args (Map) para dict padrão
-                        args = {k: v for k, v in fc.args.items()}
-                        
-                        return {
-                            "type": "action_proposal",
-                            "action": "create_transaction",
-                            "data": {
-                                "descricao": args.get('descricao'),
-                                "valor": float(args.get('valor', 0)),
-                                "tipo": args.get('tipo'),
-                                "categoria": args.get('categoria', 'Importados'),
-                                "conta": args.get('conta', ''),
-                                "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
-                            },
-                            "text_fallback": f"Entendi. Vou preparar o lançamento de {args.get('descricao')} no valor de R$ {args.get('valor')}."
-                        }
                     
-                    # --- HANDLERS PARA CATEGORIAS ---
+                    # === FLUXO A: AÇÕES (Retorna Card para Frontend) ===
+                    if fc.name == "criar_transacao":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { "type": "action_proposal", "action": "create_transaction", "data": {
+                                "descricao": args.get('descricao'), "valor": float(args.get('valor', 0)),
+                                "tipo": args.get('tipo'), "categoria": args.get('categoria', 'Importados'),
+                                "conta": args.get('conta', ''), "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
+                            }, "text_fallback": f"Entendi. Vou preparar o lançamento de {args.get('descricao')} no valor de R$ {args.get('valor')}."
+                        }
                     elif fc.name == "criar_categoria":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "create_category", 
-                            "data": args, 
-                            "text_fallback": f"Vou criar a categoria '{args.get('nome')}'."
-                        }
+                        return { "type": "action_proposal", "action": "create_category", "data": args, "text_fallback": f"Vou criar a categoria '{args.get('nome')}'." }
                     elif fc.name == "editar_categoria":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "edit_category", 
-                            "data": args, 
-                            "text_fallback": f"Vou editar a categoria ID {args.get('id')}."
-                        }
+                        return { "type": "action_proposal", "action": "edit_category", "data": args, "text_fallback": f"Vou editar a categoria ID {args.get('id')}." }
                     elif fc.name == "excluir_categoria":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "delete_category", 
-                            "data": args, 
-                            "text_fallback": f"Vou excluir a categoria ID {args.get('id')}."
-                        }
-
-                    # --- HANDLERS PARA CONTAS ---
+                        return { "type": "action_proposal", "action": "delete_category", "data": args, "text_fallback": f"Vou excluir a categoria ID {args.get('id')}." }
                     elif fc.name == "criar_conta":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "create_account", 
-                            "data": args, 
-                            "text_fallback": f"Vou criar a conta '{args.get('nome')}'."
-                        }
+                        return { "type": "action_proposal", "action": "create_account", "data": args, "text_fallback": f"Vou criar a conta '{args.get('nome')}'." }
                     elif fc.name == "editar_conta":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "edit_account", 
-                            "data": args, 
-                            "text_fallback": f"Vou editar a conta ID {args.get('id')}."
-                        }
+                        return { "type": "action_proposal", "action": "edit_account", "data": args, "text_fallback": f"Vou editar a conta ID {args.get('id')}." }
                     elif fc.name == "excluir_conta":
                         args = {k: v for k, v in fc.args.items()}
-                        return { 
-                            "type": "action_proposal", "action": "delete_account", 
-                            "data": args, 
-                            "text_fallback": f"Vou excluir a conta ID {args.get('id')}."
-                        }
+                        return { "type": "action_proposal", "action": "delete_account", "data": args, "text_fallback": f"Vou excluir a conta ID {args.get('id')}." }
+                    
+                    # === FLUXO B: CONSULTAS ANALÍTICAS (Feedback Loop) ===
+                    # 1. Executa a função localmente
+                    elif fc.name in ["consultar_maiores_gastos", "consultar_categoria_mais_gasta", "consultar_gastos_por_categoria"]:
+                        result_text = ""
+                        args = {k: v for k, v in fc.args.items()}
+                        
+                        if fc.name == "consultar_maiores_gastos":
+                            result_text = _buscar_maiores_gastos(usuario, args.get('ano'), args.get('mes'), args.get('limit', 5))
+                        elif fc.name == "consultar_categoria_mais_gasta":
+                            result_text = _buscar_categoria_mais_gasta(usuario, args.get('ano'), args.get('mes'))
+                        elif fc.name == "consultar_gastos_por_categoria":
+                            result_text = _buscar_gastos_por_categoria(usuario, args.get('ano'), args.get('mes'))
+
+                        # 2. Adiciona ao histórico da conversa ATUAL (para o modelo ver o resultado)
+                        # Precisamos adicionar a chamada da tool e o resultado
+                        part_function_response = types.Part.from_function_response(
+                            name=fc.name,
+                            response={'result': result_text}
+                        )
+                        
+                        # Adiciona a request do assistant que gerou o call
+                        contents.append(response.candidates[0].content)
+                        # Adiciona a resposta da tool
+                        contents.append(types.Content(role="tool", parts=[part_function_response]))
+
+                        # 3. Chama o modelo novamente com o novo contexto
+                        response_final = client.models.generate_content(
+                            model='gemini-2.0-flash', 
+                            contents=contents,
+                            config=generate_content_config
+                        )
+                        
+                        return response_final.text
 
         # Se não houve function call, retorna o texto normal
         resposta_texto = response.text
@@ -374,7 +429,11 @@ def _montar_contexto_financeiro(usuario):
         for t in transacoes:
             icone = "🔴" if t.tipo == 'D' else "🟢"
             descricao = t.descricao[:35] + "..." if len(t.descricao) > 35 else t.descricao
-            txt_transacoes += f"  {icone} {t.data.strftime('%d/%m/%Y')} | {descricao} | {t.categoria.nome} | R$ {t.valor:,.2f}\n"
+            
+            # ✅ CORREÇÃO:
+            categoria_nome = t.categoria.nome if t.categoria else "Sem categoria"
+            
+            txt_transacoes += f"  {icone} {t.data.strftime('%d/%m/%Y')} | {descricao} | {categoria_nome} | R$ {t.valor:,.2f}\n"
     else:
         txt_transacoes += "  ⚠️ Nenhuma transação registrada ainda.\n"
 
@@ -443,3 +502,88 @@ def limpar_historico_chat(session):
     if 'chat_history' in session:
         del session['chat_history']
         session.modified = True
+
+
+# --- FUNÇÕES AUXILIARES DE CONSULTA (AGENTE ANALÍTICO) ---
+
+def _buscar_maiores_gastos(usuario, ano, mes=None, limit=5):
+    """Busca maiores gastos do período"""
+    
+    qs = Transacao.objects.filter(
+        conta__usuario=usuario,
+        data__year=ano,
+        tipo='D'
+    )
+    
+    if mes:
+        qs = qs.filter(data__month=mes)
+    
+    top = qs.order_by('-valor')[:limit]
+    
+    # Formata resposta
+    periodo = f"{mes}/{ano}" if mes else f"{ano}"
+    texto = f"**Top {limit} gastos de {periodo}:**\n"
+    
+    if not top.exists():
+        return f"Não encontrei gastos registrados em {periodo}."
+    
+    for t in top:
+        categoria = t.categoria.nome if t.categoria else "Sem categoria"
+        texto += f"• {t.descricao}: R$ {t.valor:,.2f} ({categoria})\n"
+    
+    return texto
+
+
+def _buscar_categoria_mais_gasta(usuario, ano, mes=None):
+    """Busca categoria com mais gastos"""
+    
+    qs = Transacao.objects.filter(
+        conta__usuario=usuario,
+        data__year=ano,
+        tipo='D'
+    )
+    
+    if mes:
+        qs = qs.filter(data__month=mes)
+    
+    resultado = qs.values('categoria__nome').annotate(
+        total=Sum('valor')
+    ).order_by('-total').first()
+    
+    if not resultado:
+        return "Nenhum gasto registrado neste período."
+    
+    categoria = resultado['categoria__nome'] or "Sem categoria"
+    total = resultado['total']
+    
+    periodo = f"{mes}/{ano}" if mes else f"{ano}"
+    return f"**Categoria mais gasta em {periodo}:** {categoria} (R$ {total:,.2f})"
+
+
+def _buscar_gastos_por_categoria(usuario, ano, mes=None):
+    """Retorna gastos por categoria"""
+    
+    qs = Transacao.objects.filter(
+        conta__usuario=usuario,
+        data__year=ano,
+        tipo='D'
+    )
+    
+    if mes:
+        qs = qs.filter(data__month=mes)
+    
+    categorias = qs.values('categoria__nome').annotate(
+        total=Sum('valor')
+    ).order_by('-total')
+    
+    if not categorias.exists():
+        return "Nenhum gasto registrado neste período."
+    
+    periodo = f"{mes}/{ano}" if mes else f"{ano}"
+    texto = f"**Gastos por categoria ({periodo}):**\n"
+    
+    for item in categorias:
+        cat = item['categoria__nome'] or "Sem categoria"
+        texto += f"• {cat}: R$ {item['total']:,.2f}\n"
+    
+    return texto

@@ -148,7 +148,7 @@
 </head>
 <body class="bg-light">
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top">
         <div class="container">
             <a class="navbar-brand" href="{% url 'listagem' %}">
                 <i class="bi bi-wallet2"></i> Financeiro
@@ -171,6 +171,12 @@
 
                             <ul class="navbar-nav align-items-center">
                                 {% if user.is_authenticated %}               
+
+                                    <li class="nav-item me-2">
+                                        <a class="btn btn-primary btn-sm" href="{% url 'nova_transacao' %}">
+                                            <i class="bi bi-plus-lg"></i> Adicionar
+                                        </a>
+                                    </li>
 
                                     <li class="nav-item me-2">
                                         <a class="btn btn-success btn-sm" href="{% url 'importar_extrato' %}">

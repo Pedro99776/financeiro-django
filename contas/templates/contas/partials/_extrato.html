@@ -47,14 +47,17 @@
     </div>
 </div>
 
+{{ grafico_labels|json_script:"grafico-labels-data" }}
+{{ grafico_receitas|json_script:"grafico-receitas-data" }}
+{{ grafico_despesas|json_script:"grafico-despesas-data" }}
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         var ctx = document.getElementById("meuGrafico").getContext('2d');
 
-        // Recebe os dados do Django (safe permite renderizar o JSON puro)
-        var labels = {{ grafico_labels|safe }};
-        var dadosReceitas = {{ grafico_receitas|safe }};
-        var dadosDespesas = {{ grafico_despesas|safe }};
+        // Recebe os dados do Django via json_script
+        var labels = JSON.parse(document.getElementById('grafico-labels-data').textContent || '[]');
+        var dadosReceitas = JSON.parse(document.getElementById('grafico-receitas-data').textContent || '[]');
+        var dadosDespesas = JSON.parse(document.getElementById('grafico-despesas-data').textContent || '[]');
 
         var myChart = new Chart(ctx, {
             type: 'bar', // Pode mudar para 'line' se preferir
