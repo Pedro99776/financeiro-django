@@ -21,9 +21,10 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(next_page='login'), name='logout'), # Retained from original
 
     # Endpoint legado para gráfico (pode ser substituído pelo api/analytics no futuro)
-    path('api/transacoes-legado/', views.transacoes_api, name='transacoes_api'),
-
-    # Chatbot Endpoints
+    path('transacoes-api/', views.transacoes_api, name='transacoes_api'),
+    path('gerenciar/', views.gerenciar, name='gerenciar'),
+    
+    # --- API DRF Router ---Endpoints
     path('api/chat/', views.chat_api, name='chat_api'),
     path('api/chat/limpar/', views.limpar_historico_chat_api, name='limpar_historico_chat'),
 

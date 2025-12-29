@@ -11,6 +11,7 @@ from .serializers import (
     CategoriaSerializer, ContaSerializer,
     ResumoFinanceiroSerializer, GastosPorCategoriaSerializer
 )
+from .chatbot import limpar_cache_contexto
 
 
 class BaseUserViewSet(viewsets.ModelViewSet):
@@ -19,6 +20,15 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(usuario=self.request.user)
+        limpar_cache_contexto(self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        limpar_cache_contexto(self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        limpar_cache_contexto(self.request.user)
 
 
 class CategoriaViewSet(BaseUserViewSet):
@@ -44,6 +54,18 @@ class ContaViewSet(BaseUserViewSet):
 
 class TransacaoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save()
+        limpar_cache_contexto(self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save()
+        limpar_cache_contexto(self.request.user)
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        limpar_cache_contexto(self.request.user)
 
     def get_queryset(self):
         queryset = Transacao.objects.filter(conta__usuario=self.request.user).order_by('-data')

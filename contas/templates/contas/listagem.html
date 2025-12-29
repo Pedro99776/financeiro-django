@@ -140,8 +140,11 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function renderizarResumo(data) {
         const saldoEl = document.getElementById('saldo');
-        saldoEl.textContent = formatarMoeda(data.saldo);
-        saldoEl.className = `display-3 fw-bold ${data.saldo < 0 ? 'text-danger' : 'text-primary'}`;
+        // Usa o saldo acumulado real (caixa atual) se disponível, senão usa o do período
+        const saldoExibir = data.saldo_caixa_atual !== undefined ? data.saldo_caixa_atual : data.saldo;
+        
+        saldoEl.textContent = formatarMoeda(saldoExibir);
+        saldoEl.className = `display-3 fw-bold ${saldoExibir < 0 ? 'text-danger' : 'text-primary'}`;
         document.getElementById('totalReceitas').textContent = formatarMoeda(data.total_receitas);
         document.getElementById('totalDespesas').textContent = formatarMoeda(data.total_despesas);
     }

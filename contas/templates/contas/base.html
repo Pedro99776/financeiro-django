@@ -170,28 +170,18 @@
                         <li class="nav-item dropdown">
 
                             <ul class="navbar-nav align-items-center">
-                                {% if user.is_authenticated %}
+                                {% if user.is_authenticated %}               
 
                                     <li class="nav-item me-2">
-                                        <a class="btn btn-success btn-sm" href="{% url 'nova_transacao' %}">
-                                            <i class="bi bi-plus-lg"></i> Nova Transação
-                                        </a>
-                                    </li>
-
-                                    <li class="nav-item me-2">
-                                        <a class="nav-link text-white" href="{% url 'importar_extrato' %}">
+                                        <a class="btn btn-success btn-sm" href="{% url 'importar_extrato' %}">
                                             <i class="bi bi-cloud-upload"></i> Importar
                                         </a>
                                     </li>
 
-                                    <li class="nav-item dropdown me-3">
-                                        <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
-                                            <i class="bi bi-plus-circle"></i> Nova Categoria/Conta
+                                    <li class="nav-item me-2">
+                                        <a class="nav-link text-white {% if nbar == 'gerenciar' %}fw-bold{% endif %}" href="{% url 'gerenciar' %}">
+                                            <i class="bi bi-gear"></i> Gerenciar Categorias/Contas
                                         </a>
-                                        <ul class="dropdown-menu dropdown-menu-end">
-                                            <li><a class="dropdown-item bi-plus-circle" href="{% url 'nova_categoria' %}"> Categorias</a></li>
-                                            <li><a class="dropdown-item bi-plus-circle" href="{% url 'nova_conta' %}"> Contas</a></li>
-                                        </ul>
                                     </li>
 
                                     <li class="nav-item border-start ps-3 ms-2 d-flex align-items-center">
@@ -222,6 +212,12 @@
                         </li>
 
                     {% else %}
+                        <li class="nav-item">
+                            <a class="nav-link {% if nbar == 'dashboard' %}active text-primary fw-bold{% endif %}" href="{% url 'listagem' %}">Home</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if nbar == 'gerenciar' %}active text-primary fw-bold{% endif %}" href="{% url 'gerenciar' %}">Gerenciar</a>
+                        </li>
                         <li class="nav-item">
                             <a class="btn btn-primary btn-sm" href="{% url 'login' %}">Entrar</a>
                         </li>

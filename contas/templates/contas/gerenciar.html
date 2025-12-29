@@ -1,0 +1,393 @@
+{% extends 'contas/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="fw-bold text-dark mb-0">Gerenciar Cadastros</h2>
+    </div>
+
+    <!-- Nav Tabs -->
+    <ul class="nav nav-tabs mb-4" id="gerenciarTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="cats-tab" data-bs-toggle="tab" data-bs-target="#cats-content" type="button" role="tab">Categorias</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="contas-tab" data-bs-toggle="tab" data-bs-target="#contas-content" type="button" role="tab">Contas</button>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content" id="gerenciarContent">
+        
+        <!-- Categorias Tab -->
+        <div class="tab-pane fade show active" id="cats-content" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white fw-bold">Nova Categoria</div>
+                        <div class="card-body">
+                            <form id="formCategoria">
+                                <input type="hidden" id="catId">
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Nome</label>
+                                    <input type="text" class="form-control" id="catNome" required>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="btnSaveCat">Salvar</button>
+                                    <button type="button" class="btn btn-outline-secondary d-none" id="btnCancelCat">Cancelar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th class="text-end" style="width: 100px;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaCategorias">
+                                        <!-- JS vai preencher -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Contas Tab -->
+        <div class="tab-pane fade" id="contas-content" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white fw-bold">Nova Conta</div>
+                        <div class="card-body">
+                            <form id="formConta">
+                                <input type="hidden" id="contaId">
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Nome</label>
+                                    <input type="text" class="form-control" id="contaNome" placeholder="Ex: Nubank" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Instituição</label>
+                                    <input type="text" class="form-control" id="contaInst" placeholder="Ex: Banco Digital">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Saldo Inicial (R$)</label>
+                                    <input type="number" step="0.01" class="form-control" id="contaSaldo" value="0.00">
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="btnSaveConta">Salvar</button>
+                                    <button type="button" class="btn btn-outline-secondary d-none" id="btnCancelConta">Cancelar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Instituição</th>
+                                            <th>Saldo Inicial</th>
+                                            <th class="text-end" style="width: 100px;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaContas">
+                                        <!-- JS vai preencher -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+    <!-- Hidden CSRF Token Container -->
+    <div id="csrf-container" class="d-none">
+        {% csrf_token %}
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal fade" id="deleteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirmar Exclusão</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="deleteMsg">Tem certeza?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    // --- UTILS ---
+    
+    // ✅ Obtém o token CSRF diretamente do DOM (pois o cookie é HttpOnly)
+    function getCsrfToken() {
+        const input = document.querySelector('#csrf-container input');
+        return input ? input.value : '';
+    }
+
+    // Função para headers dinâmicos (chamar em cada fetch)
+    function getHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken()
+        };
+    }
+
+    // --- MODAL LOGIC ---
+    let deleteCallback = null;
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+    const btnConfirmDelete = document.getElementById('btnConfirmDelete');
+    
+    btnConfirmDelete.addEventListener('click', () => {
+        if(deleteCallback) deleteCallback();
+        deleteModal.hide();
+    });
+
+    function showDelete(msg, callback) {
+        document.getElementById('deleteMsg').textContent = msg;
+        deleteCallback = callback;
+        deleteModal.show();
+    }
+
+    // --- CATEGORIAS ---
+    const tableCat = document.getElementById('tabelaCategorias');
+    const formCat = document.getElementById('formCategoria');
+    const btnCancelCat = document.getElementById('btnCancelCat');
+
+    function loadCategorias() {
+        tableCat.innerHTML = '<tr><td colspan="2" class="text-center p-3">Carregando...</td></tr>';
+        fetch('/api/categorias/')
+            .then(r => r.json())
+            .then(data => {
+                tableCat.innerHTML = '';
+                if(data.length === 0) {
+                     tableCat.innerHTML = '<tr><td colspan="2" class="text-center p-3 text-muted">Nenhuma categoria encontrada.</td></tr>';
+                     return;
+                }
+                data.forEach(cat => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${cat.nome}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-link text-secondary btn-edit-cat" data-id="${cat.id}" data-nome="${cat.nome}"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-link text-danger btn-del-cat" data-id="${cat.id}"><i class="bi bi-trash"></i></button>
+                        </td>
+                    `;
+                    tableCat.appendChild(tr);
+                });
+                bindCatEvents();
+            });
+    }
+
+    function bindCatEvents() {
+        document.querySelectorAll('.btn-del-cat').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // ✅ Usa Modal em vez de confirm()
+                showDelete('Tem certeza que deseja excluir esta categoria?', () => {
+                    fetch(`/api/categorias/${btn.dataset.id}/`, { 
+                        method: 'DELETE', 
+                        headers: getHeaders(),
+                        credentials: 'same-origin'
+                    }).then(r => loadCategorias());
+                });
+            });
+        });
+
+        document.querySelectorAll('.btn-edit-cat').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('catId').value = btn.dataset.id;
+                document.getElementById('catNome').value = btn.dataset.nome;
+                document.getElementById('btnSaveCat').textContent = "Atualizar";
+                btnCancelCat.classList.remove('d-none');
+            });
+        });
+    }
+
+    formCat.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('catId').value;
+        const nome = document.getElementById('catNome').value;
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/categorias/${id}/` : '/api/categorias/';
+
+        fetch(url, {
+            method: method,
+            headers: getHeaders(), // ✅ Dinâmico
+            body: JSON.stringify({ nome }),
+            credentials: 'same-origin'
+        }).then(r => {
+            if(r.ok) {
+                resetFormCat();
+                loadCategorias();
+            } else {
+                alert('Erro ao salvar categoria.');
+            }
+        });
+    });
+
+    btnCancelCat.addEventListener('click', resetFormCat);
+
+    function resetFormCat() {
+        formCat.reset();
+        document.getElementById('catId').value = '';
+        document.getElementById('btnSaveCat').textContent = "Salvar";
+        btnCancelCat.classList.add('d-none');
+    }
+
+    // --- CONTAS ---
+    const tableConta = document.getElementById('tabelaContas');
+    const formConta = document.getElementById('formConta');
+    const btnCancelConta = document.getElementById('btnCancelConta');
+
+    function loadContas() {
+        tableConta.innerHTML = '<tr><td colspan="4" class="text-center p-3">Carregando...</td></tr>';
+        fetch('/api/contas/')
+            .then(r => r.json())
+            .then(data => {
+                tableConta.innerHTML = '';
+                if(data.length === 0) {
+                     tableConta.innerHTML = '<tr><td colspan="4" class="text-center p-3 text-muted">Nenhuma conta encontrada.</td></tr>';
+                     return;
+                }
+                data.forEach(conta => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${conta.nome}</td>
+                        <td>${conta.instituicao || '-'}</td>
+                        <td>R$ ${parseFloat(conta.saldo_inicial).toFixed(2)}</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-link text-secondary btn-edit-conta" 
+                                data-id="${conta.id}" 
+                                data-nome="${conta.nome}"
+                                data-inst="${conta.instituicao || ''}"
+                                data-saldo="${conta.saldo_inicial}"
+                            ><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-link text-danger btn-del-conta" data-id="${conta.id}"><i class="bi bi-trash"></i></button>
+                        </td>
+                    `;
+                    tableConta.appendChild(tr);
+                });
+                bindContaEvents();
+            });
+    }
+
+    function bindContaEvents() {
+        document.querySelectorAll('.btn-del-conta').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // ✅ Usa Modal em vez de confirm()
+                showDelete('Tem certeza que deseja excluir esta conta? Todas as transações associadas serão apagadas!', () => {
+                    fetch(`/api/contas/${btn.dataset.id}/`, { 
+                        method: 'DELETE', 
+                        headers: getHeaders(),
+                        credentials: 'same-origin'
+                    }).then(r => loadContas());
+                });
+            });
+        });
+
+        document.querySelectorAll('.btn-edit-conta').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('contaId').value = btn.dataset.id;
+                document.getElementById('contaNome').value = btn.dataset.nome;
+                document.getElementById('contaInst').value = btn.dataset.inst;
+                document.getElementById('contaSaldo').value = btn.dataset.saldo;
+                document.getElementById('btnSaveConta').textContent = "Atualizar";
+                btnCancelConta.classList.remove('d-none');
+            });
+        });
+    }
+
+    formConta.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('contaId').value;
+        const saldoInput = document.getElementById('contaSaldo').value;
+        
+        // ✅ Trata saldo vazio como 0
+        const saldoFinal = saldoInput.trim() === '' ? 0 : parseFloat(saldoInput);
+
+        const payload = {
+            nome: document.getElementById('contaNome').value,
+            instituicao: document.getElementById('contaInst').value,
+            saldo_inicial: saldoFinal
+        };
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/contas/${id}/` : '/api/contas/';
+
+        fetch(url, {
+            method: method,
+            headers: getHeaders(), // ✅ Dinâmico
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        }).then(r => {
+            if(r.ok) {
+                resetFormConta();
+                loadContas();
+            } else {
+                alert('Erro ao salvar conta.');
+            }
+        });
+    });
+
+    btnCancelConta.addEventListener('click', resetFormConta);
+
+    function resetFormConta() {
+        formConta.reset();
+        document.getElementById('contaId').value = '';
+        document.getElementById('btnSaveConta').textContent = "Salvar";
+        btnCancelConta.classList.add('d-none');
+    }
+
+    // Inicialização
+    loadCategorias();
+    loadContas();
+
+    // --- SOFT RELOAD LISTENERS ---
+    // Recarrega as tabelas se o Chatbot fizer alterações
+    document.addEventListener('categoryUpdated', () => {
+        loadCategorias();
+        // Feedback visual opcional
+        const badge = document.getElementById('cats-tab');
+        if(badge) {
+            badge.classList.add('text-success', 'fw-bold');
+            setTimeout(() => badge.classList.remove('text-success', 'fw-bold'), 2000);
+        }
+    });
+
+    document.addEventListener('accountUpdated', () => {
+        loadContas();
+        const badge = document.getElementById('contas-tab');
+        if(badge) {
+            badge.classList.add('text-success', 'fw-bold');
+            setTimeout(() => badge.classList.remove('text-success', 'fw-bold'), 2000);
+        }
+    });
+});
+</script>
+{% endblock %}

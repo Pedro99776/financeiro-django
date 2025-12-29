@@ -133,12 +133,26 @@ def transacoes_api(request):
     cat_despesas_labels = [item['categoria__nome'] for item in desp_cat]
     cat_despesas_data = [float(item['total']) for item in desp_cat]
 
-    # --- 6. SERIALIZER E RESPOSTA ---
+    # --- 6. SALDO EM CAIXA ATUAL (ACUMULADO) ---
+    # Soma dos saldos iniciais de todas as contas + todas as receitas e despesas históricas
+    contas = Conta.objects.filter(usuario=request.user)
+    
+    total_inicial = contas.aggregate(Sum('saldo_inicial'))['saldo_inicial__sum'] or 0
+    
+    # Todas as transações até hoje (para saldo acumulado)
+    todas_transacoes = Transacao.objects.filter(conta__usuario=request.user)
+    hist_receitas = todas_transacoes.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+    hist_despesas = todas_transacoes.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+    
+    saldo_caixa_atual = total_inicial + hist_receitas - hist_despesas
+
+    # --- 7. SERIALIZER E RESPOSTA ---
     serializer = TransacaoSerializer(transacoes_qs, many=True)
 
     return Response({
         'transacoes': serializer.data,
-        'saldo': saldo,
+        'saldo': saldo, # Saldo do período
+        'saldo_caixa_atual': saldo_caixa_atual, # Saldo total acumulado (real)
         'total_receitas': total_receitas,
         'total_despesas': total_despesas,
         'grafico_labels': grafico_labels,
@@ -146,8 +160,6 @@ def transacoes_api(request):
         'grafico_despesas': grafico_despesas,
         'cat_receitas_labels': cat_receitas_labels,
         'cat_receitas_data': cat_receitas_data,
-        'cat_despesas_labels': cat_despesas_labels,
-        'cat_despesas_data': cat_despesas_data,
         'cat_despesas_labels': cat_despesas_labels,
         'cat_despesas_data': cat_despesas_data,
     })
@@ -366,3 +378,12 @@ def importar_extrato(request):
         form = UploadFileForm(user=request.user)
 
     return render(request, 'contas/importar.html', {'form': form, 'categorias': categorias})
+
+
+@login_required
+def gerenciar(request):
+    """
+    Renderiza a página de gerenciamento de Categorias e Contas.
+    O frontend (gerenciar.html) se comunica via API.
+    """
+    return render(request, 'contas/gerenciar.html', {'nbar': 'gerenciar'})

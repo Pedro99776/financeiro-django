@@ -37,38 +37,78 @@ Você é **FinBot**, assistente financeiro pessoal do usuário.
 - Use emojis com moderação (1-2 por resposta)
 - Linguagem natural e clara
 
-📊 DADOS ATUALIZADOS DO USUÁRIO:
+DADOS DO USUÁRIO:
 {resumo_financeiro}
 
-✅ SUAS CAPACIDADES:
-1. Responder perguntas sobre saldo, gastos, receitas e transações
-2. Analisar padrões de gastos por categoria
-3. Comparar gastos entre períodos
-4. Fornecer insights financeiros baseados APENAS nos dados acima
-5. Usar Markdown: **negrito** para valores importantes, *itálico* para ênfase
+FERRAMENTAS DISPONÍVEIS:
 
-⚠️ LIMITAÇÕES IMPORTANTES:
-Você NÃO pode fazer cálculos com dados que não foram fornecidos
+1. criar_transacao
+   Quando: usuário diz "gastei", "recebi", "comprei", "paguei", "pix"
+   Ação: CHAME IMEDIATAMENTE
+   - Infira categoria se não foi dita
+   - Conta="" se não foi dita
+   - Data=hoje se não foi dita
+   - Valor=0 se não foi dito
+
+2. criar_categoria
+   Quando: "crie categoria X", "nova categoria X"
+   Ação: CHAME criar_categoria(nome="X")
+
+3. editar_categoria
+   Quando: "renomeie categoria X para Y", "mude categoria X"
+   Ação: Busque ID de X no contexto → CHAME editar_categoria(id=ID, novo_nome="Y")
+
+4. excluir_categoria
+   Quando: "delete categoria X", "remova categoria X"
+   Ação: Busque ID de X → CHAME excluir_categoria(id=ID)
+
+5. criar_conta
+   Quando: "crie conta X", "nova conta X"
+   Ação: CHAME criar_conta(nome="X", instituicao="X", saldo_inicial=0)
+
+6. editar_conta
+   Quando: "edite conta X", "mude saldo de X"
+   Ação: Busque ID de X → CHAME editar_conta(id=ID, ...)
+
+7. excluir_conta
+   Quando: "delete conta X"
+   Ação: Busque ID de X → CHAME excluir_conta(id=ID)
+
+REGRAS:
+- NÃO peça confirmação (formulário faz isso)
+- SEMPRE use IDs do contexto para editar/excluir
+
+📋 FORMATAÇÃO DE LISTAS:
+Quando listar categorias ou contas, use este formato:
+
+**Categorias:**
+- Nome1
+- Nome2
+- Nome3
+
+**Contas:**
+- Nome (Instituição): R$ saldo
+- Nome (Instituição): R$ saldo
+- Saldo total: R$ saldo
+
+🚫 NUNCA mostre IDs para o usuário (use apenas internamente)
 
 🚫 PERGUNTAS NÃO-FINANCEIRAS:
-- Se a pergunta não for sobre finanças pessoais, responda educadamente:
-  "Sou especializado em ajudar com suas finanças. Posso responder sobre saldo, gastos, receitas ou transações. Como posso ajudar nisso?"
+- Se a pergunta não for sobre finanças pessoais ou O SISTEMA (categorias/contas), responda educadamente:
+  "Sou especializado em ajudar com suas finanças e gerenciamento do app. Posso responder sobre saldo, gastos, receitas ou ajudar a organizar categorias e contas."
 - Exemplo: clima, notícias, esportes → redirecionar para finanças
 - NUNCA invente informações sobre outros assuntos
 
-📌 REGRAS DE OURO PARA AGENTES (IMPORTANTE):
-- SE O USUÁRIO QUER CRIAR UMA TRANSAÇÃO (ex: "gastei", "recebi", "comprei", "pix"):
-  1. NÃO FAÇA PERGUNTAS DE CONFIRMAÇÃO.
-  2. NÃO PERGUNTE A CATEGORIA OU CONTA SE NÃO FORAM DITAS.
-  3. CHAME A FERRAMENTA `criar_transacao` IMEDIATAMENTE.
-  4. INFERIR DADOS FALTANTES:
-     - Se não disse categoria, CHUTE a mais provável (ex: "McDonalds" -> "Alimentação" ou "Uber" -> "Transporte").
-     - Se não disse conta, envie STRING VAZIA "" (o sistema usará a padrão).
-     - Se não disse data, assuma HOJE.
-  5. O formulário visual servirá para confirmação. SUA FUNÇÃO É PREENCHER O RASCUNHO.
+🚨 REGRA SUPREMA DE AÇÃO (CRÍTICO):
+SE O USUÁRIO PEDIR PARA CRIAR, EDITAR OU EXCLUIR ALGO:
+VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
+1. VC DEVE CHAMAR A FERRAMENTA CORRESPONDENTE (Tool Call).
+2. VC NÃO PODE RESPONDER: "Criando categoria..." ou "Criei a conta...".
+3. A ÚNICA resposta aceitável para uma ação é o CHAMADO DA FUNÇÃO.
+4. Se você responder apenas textos como "Vou criar a categoria X", VOCÊ FALHOU.
 
-- Use EXATAMENTE os valores fornecidos para o valor monetário.
-- Mantenha foco em finanças pessoais.
+📌 REGRAS ESPECÍFICAS PARA AÇÕES:
+- Respostas: máx 3 parágrafos, use **negrito** em valores
 """
 
     # 3. Definição de Ferramentas (Function Calling)
@@ -89,8 +129,53 @@ Você NÃO pode fazer cálculos com dados que não foram fornecidos
             required=["descricao", "valor", "tipo", "data", "categoria"]
         )
     )
+    # --- TOOLS PARA CATEGORIAS ---
+    ferramenta_criar_categoria = types.FunctionDeclaration(
+        name="criar_categoria", description="Cria uma nova categoria.",
+        parameters=types.Schema(type="OBJECT", properties={"nome": types.Schema(type="STRING", description="Nome da categoria")}, required=["nome"])
+    )
+    ferramenta_editar_categoria = types.FunctionDeclaration(
+        name="editar_categoria", description="Edita o nome de uma categoria existente. Requer ID (veja no contexto).",
+        parameters=types.Schema(type="OBJECT", properties={
+            "id": types.Schema(type="INTEGER", description="ID da categoria a editar"),
+            "novo_nome": types.Schema(type="STRING", description="Novo nome")
+        }, required=["id", "novo_nome"])
+    )
+    ferramenta_excluir_categoria = types.FunctionDeclaration(
+        name="excluir_categoria", description="Exclui uma categoria existente. Requer ID (veja no contexto).",
+        parameters=types.Schema(type="OBJECT", properties={"id": types.Schema(type="INTEGER", description="ID da categoria")}, required=["id"])
+    )
+
+    # --- TOOLS PARA CONTAS ---
+    ferramenta_criar_conta = types.FunctionDeclaration(
+        name="criar_conta", description="Cria uma nova conta bancária.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "nome": types.Schema(type="STRING", description="Nome da conta"),
+            "instituicao": types.Schema(type="STRING", description="Instituição (opcional)"),
+            "saldo_inicial": types.Schema(type="NUMBER", description="Saldo inicial")
+        }, required=["nome"])
+    )
+    ferramenta_editar_conta = types.FunctionDeclaration(
+        name="editar_conta", description="Edita uma conta existente.",
+        parameters=types.Schema(type="OBJECT", properties={
+            "id": types.Schema(type="INTEGER", description="ID da conta"),
+            "nome": types.Schema(type="STRING", description="Novo nome"),
+            "instituicao": types.Schema(type="STRING", description="Nova instituição"),
+            "saldo_inicial": types.Schema(type="NUMBER", description="Novo saldo inicial")
+        }, required=["id"])
+    )
+    ferramenta_excluir_conta = types.FunctionDeclaration(
+        name="excluir_conta", description="Exclui uma conta existente.",
+        parameters=types.Schema(type="OBJECT", properties={"id": types.Schema(type="INTEGER", description="ID da conta")}, required=["id"])
+    )
     
-    tools = [types.Tool(function_declarations=[ferramenta_criar_transacao])]
+    tools = [
+        types.Tool(function_declarations=[
+            ferramenta_criar_transacao,
+            ferramenta_criar_categoria, ferramenta_editar_categoria, ferramenta_excluir_categoria,
+            ferramenta_criar_conta, ferramenta_editar_conta, ferramenta_excluir_conta
+        ])
+    ]
 
     # 4. Monta conversa com histórico
     contents = []
@@ -152,6 +237,52 @@ Você NÃO pode fazer cálculos com dados que não foram fornecidos
                                 "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
                             },
                             "text_fallback": f"Entendi. Vou preparar o lançamento de {args.get('descricao')} no valor de R$ {args.get('valor')}."
+                        }
+                    
+                    # --- HANDLERS PARA CATEGORIAS ---
+                    elif fc.name == "criar_categoria":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "create_category", 
+                            "data": args, 
+                            "text_fallback": f"Vou criar a categoria '{args.get('nome')}'."
+                        }
+                    elif fc.name == "editar_categoria":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "edit_category", 
+                            "data": args, 
+                            "text_fallback": f"Vou editar a categoria ID {args.get('id')}."
+                        }
+                    elif fc.name == "excluir_categoria":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "delete_category", 
+                            "data": args, 
+                            "text_fallback": f"Vou excluir a categoria ID {args.get('id')}."
+                        }
+
+                    # --- HANDLERS PARA CONTAS ---
+                    elif fc.name == "criar_conta":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "create_account", 
+                            "data": args, 
+                            "text_fallback": f"Vou criar a conta '{args.get('nome')}'."
+                        }
+                    elif fc.name == "editar_conta":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "edit_account", 
+                            "data": args, 
+                            "text_fallback": f"Vou editar a conta ID {args.get('id')}."
+                        }
+                    elif fc.name == "excluir_conta":
+                        args = {k: v for k, v in fc.args.items()}
+                        return { 
+                            "type": "action_proposal", "action": "delete_account", 
+                            "data": args, 
+                            "text_fallback": f"Vou excluir a conta ID {args.get('id')}."
                         }
 
         # Se não houve function call, retorna o texto normal
@@ -267,8 +398,26 @@ def _montar_contexto_financeiro(usuario):
     else:
         txt_categorias += "  ⚠️ Nenhum gasto categorizado este mês.\n"
 
+    # === 5. LISTA DE CATEGORIAS E CONTAS (PARA REFERÊNCIA DO AGENTE) ===
+    # O agente precisa dos IDs para editar ou excluir
+    cats_db = Categoria.objects.filter(usuario=usuario).order_by('nome')
+    txt_ref_cats = "\n📂 **CATEGORIAS DISPONÍVEIS (ID - Nome):**\n"
+    if cats_db.exists():
+        for c in cats_db:
+            txt_ref_cats += f"  - ID {c.id}: {c.nome}\n"
+    else:
+        txt_ref_cats += "  (Nenhuma categoria cadastrada)\n"
+
+    contas_db = Conta.objects.filter(usuario=usuario).order_by('nome')
+    txt_ref_contas = "\n💳 **CONTAS DISPONÍVEIS (ID - Nome):**\n"
+    if contas_db.exists():
+        for c in contas_db:
+            txt_ref_contas += f"  - ID {c.id}: {c.nome}\n"
+    else:
+        txt_ref_contas += "  (Nenhuma conta cadastrada)\n"
+
     # === MONTA CONTEXTO FINAL ===
-    contexto_final = f"{txt_contas}\n{txt_resumo}\n{txt_transacoes}\n{txt_categorias}"
+    contexto_final = f"{txt_contas}\n{txt_resumo}\n{txt_transacoes}\n{txt_categorias}\n{txt_ref_cats}\n{txt_ref_contas}"
     
     # Salva no cache por 5 minutos (300 segundos)
     # ATENÇÃO: É necessário implementar mecanismo de invalidação de cache ao salvar novas transações!
