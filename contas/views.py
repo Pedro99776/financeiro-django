@@ -82,6 +82,13 @@ def transacoes_api(request):
     except (TypeError, ValueError):
         mes_filtrado = hoje.month
 
+    # --- NOVOS FILTROS AVANÇADOS ---
+    data_inicio = request.GET.get('data_inicio')  # YYYY-MM-DD
+    data_fim = request.GET.get('data_fim')
+    contas_ids = request.GET.get('contas')  # "1,2,3"
+    categorias_ids = request.GET.get('categorias')
+    tipo_transacao = request.GET.get('tipo')  # 'R', 'D', ou None
+
     # ✅ PERSISTÊNCIA: Salva os filtros na sessão do usuário
     request.session['filtro_ano'] = ano_filtrado
     request.session['filtro_mes'] = mes_filtrado
@@ -90,12 +97,44 @@ def transacoes_api(request):
     # --- 2. QUERYSET PRINCIPAL ---
     # ✅ SEGURANÇA: Filtra apenas transações das contas do usuário logado
     transacoes_qs = Transacao.objects.select_related('categoria', 'conta').filter(
-        data__year=ano_filtrado,
         conta__usuario=request.user  # ✅ FILTRO CRÍTICO
     ).order_by('-data')
 
-    if not eh_ano_inteiro:
-        transacoes_qs = transacoes_qs.filter(data__month=mes_filtrado)
+    # Aplicar filtro de período (Data customizada tem prioridade)
+    if data_inicio or data_fim:
+        if data_inicio:
+            transacoes_qs = transacoes_qs.filter(data__gte=data_inicio)
+        
+        if data_fim:
+            transacoes_qs = transacoes_qs.filter(data__lte=data_fim)
+        else:
+            # Se forneceu início mas não fim, considera até Hoje (conforme solicitado)
+            transacoes_qs = transacoes_qs.filter(data__lte=hoje.date())
+    else:
+        # Fallback: Ano/Mês tradicional
+        transacoes_qs = transacoes_qs.filter(data__year=ano_filtrado)
+        if not eh_ano_inteiro:
+            transacoes_qs = transacoes_qs.filter(data__month=mes_filtrado)
+
+    # Filtrar por contas específicas
+    if contas_ids:
+        try:
+            ids_list = [int(id.strip()) for id in contas_ids.split(',') if id.strip()]
+            transacoes_qs = transacoes_qs.filter(conta_id__in=ids_list)
+        except ValueError:
+            pass  # Ignora IDs inválidos
+
+    # Filtrar por categorias específicas
+    if categorias_ids:
+        try:
+            ids_list = [int(id.strip()) for id in categorias_ids.split(',') if id.strip()]
+            transacoes_qs = transacoes_qs.filter(categoria_id__in=ids_list)
+        except ValueError:
+            pass
+
+    # Filtrar por tipo de transação
+    if tipo_transacao in ['R', 'D']:
+        transacoes_qs = transacoes_qs.filter(tipo=tipo_transacao)
 
     # --- 3. CÁLCULOS TOTAIS ---
     total_receitas = transacoes_qs.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0

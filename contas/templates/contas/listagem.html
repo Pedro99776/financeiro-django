@@ -4,43 +4,126 @@
 {% block content %}
 <div class="container-fluid">
 
-    <!-- Filtros -->
-    <form id="filtrosForm" class="row g-3 align-items-center mb-5 bg-white p-3 rounded shadow-sm">
-        <div class="col-auto">
-            <label class="fw-bold small text-muted">Ano:</label>
-            <select name="ano" id="filtroAno" class="form-select form-select-sm">
-                <option value="2024" {% if ano_atual == 2024 %}selected{% endif %}>2024</option>
-                <option value="2025" {% if ano_atual == 2025 %}selected{% endif %}>2025</option>
-                <option value="2026" {% if ano_atual == 2026 %}selected{% endif %}>2026</option>
-            </select>
+    <!-- Barra de Filtros (Visível) -->
+    <div class="bg-white p-3 rounded shadow-sm mb-3">
+        <div class="d-flex flex-wrap align-items-end gap-3">
+            
+            <!-- Ano -->
+            <div style="width: 100px;">
+                <label class="form-label small text-muted fw-bold mb-1">Ano</label>
+                <select id="filtroAno" class="form-select form-select-sm auto-refresh">
+                    <option value="2024" {% if ano_atual == 2024 %}selected{% endif %}>2024</option>
+                    <option value="2025" {% if ano_atual == 2025 %}selected{% endif %}>2025</option>
+                    <option value="2026" {% if ano_atual == 2026 %}selected{% endif %}>2026</option>
+                </select>
+            </div>
+
+            <!-- Mês -->
+            <div style="width: 140px;">
+                <label class="form-label small text-muted fw-bold mb-1">Mês</label>
+                <select id="filtroMes" class="form-select form-select-sm auto-refresh">
+                    <option value="1" {% if mes_atual == 1 %}selected{% endif %}>Janeiro</option>
+                    <option value="2" {% if mes_atual == 2 %}selected{% endif %}>Fevereiro</option>
+                    <option value="3" {% if mes_atual == 3 %}selected{% endif %}>Março</option>
+                    <option value="4" {% if mes_atual == 4 %}selected{% endif %}>Abril</option>
+                    <option value="5" {% if mes_atual == 5 %}selected{% endif %}>Maio</option>
+                    <option value="6" {% if mes_atual == 6 %}selected{% endif %}>Junho</option>
+                    <option value="7" {% if mes_atual == 7 %}selected{% endif %}>Julho</option>
+                    <option value="8" {% if mes_atual == 8 %}selected{% endif %}>Agosto</option>
+                    <option value="9" {% if mes_atual == 9 %}selected{% endif %}>Setembro</option>
+                    <option value="10" {% if mes_atual == 10 %}selected{% endif %}>Outubro</option>
+                    <option value="11" {% if mes_atual == 11 %}selected{% endif %}>Novembro</option>
+                    <option value="12" {% if mes_atual == 12 %}selected{% endif %}>Dezembro</option>
+                </select>
+            </div>
+
+            <!-- Toggle Ano Inteiro -->
+            <div class="form-check form-switch pb-1">
+                <input class="form-check-input auto-refresh" type="checkbox" id="chkAno" {% if eh_ano_inteiro %}checked{% endif %}>
+                <label class="form-check-label small" for="chkAno">Ano Inteiro</label>
+            </div>
+
+            <div class="vr mx-2 text-muted"></div>
+
+            <!-- Range de Datas Customizado -->
+            <div style="width: 130px;">
+                <label class="form-label small text-muted fw-bold mb-1">Início</label>
+                <input type="date" id="dataInicio" class="form-control form-control-sm auto-refresh">
+            </div>
+            <div style="width: 130px;">
+                <label class="form-label small text-muted fw-bold mb-1">Fim</label>
+                <input type="date" id="dataFim" class="form-control form-control-sm auto-refresh">
+            </div>
+
+            <!-- Botão Limpar Datas -->
+             <button class="btn btn-outline-danger btn-sm align-self-end mb-1" id="btnLimparDatas" title="Limpar Datas" type="button">
+                <i class="bi bi-x-lg"></i>
+            </button>
+
+            <div class="vr mx-2 text-muted"></div>
+
+            <!-- Botão Toggle Filtros Avançados -->
+            <button class="btn btn-outline-primary btn-sm ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#filtrosAvancados" aria-expanded="false">
+                <i class="bi bi-sliders"></i> Filtros Avançados
+            </button>
         </div>
-        <div class="col-auto">
-            <label class="fw-bold small text-muted">Mês:</label>
-            <select name="mes" id="filtroMes" class="form-select form-select-sm">
-                <option value="1" {% if mes_atual == 1 %}selected{% endif %}>Janeiro</option>
-                <option value="2" {% if mes_atual == 2 %}selected{% endif %}>Fevereiro</option>
-                <option value="3" {% if mes_atual == 3 %}selected{% endif %}>Março</option>
-                <option value="4" {% if mes_atual == 4 %}selected{% endif %}>Abril</option>
-                <option value="5" {% if mes_atual == 5 %}selected{% endif %}>Maio</option>
-                <option value="6" {% if mes_atual == 6 %}selected{% endif %}>Junho</option>
-                <option value="7" {% if mes_atual == 7 %}selected{% endif %}>Julho</option>
-                <option value="8" {% if mes_atual == 8 %}selected{% endif %}>Agosto</option>
-                <option value="9" {% if mes_atual == 9 %}selected{% endif %}>Setembro</option>
-                <option value="10" {% if mes_atual == 10 %}selected{% endif %}>Outubro</option>
-                <option value="11" {% if mes_atual == 11 %}selected{% endif %}>Novembro</option>
-                <option value="12" {% if mes_atual == 12 %}selected{% endif %}>Dezembro</option>
-            </select>
-        </div>
-        <div class="col-auto d-flex align-items-center pt-3">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" name="ano_inteiro" id="chkAno" {% if eh_ano_inteiro %}checked{% endif %}>
-                <label class="form-check-label fw-bold" for="chkAno">Ver Ano Inteiro</label>
+    </div>
+
+    <!-- Filtros Avançados (Colapsável) -->
+    <div class="collapse mb-5" id="filtrosAvancados">
+        <div class="card card-body border-0 shadow-sm bg-light">
+            <div class="row g-4">
+                
+                <!-- Coluna 1: Contas -->
+                <div class="col-md-4">
+                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2"><i class="bi bi-wallet2"></i> Contas</h6>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" id="selectAllContas" class="form-check-input" checked>
+                        <label class="form-check-label fw-bold small text-muted">Selecionar Todas</label>
+                    </div>
+                    <div id="contasCheckboxes" class="d-flex flex-column gap-1" style="max-height: 150px; overflow-y: auto;">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
+                <!-- Coluna 2: Categorias -->
+                <div class="col-md-5">
+                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2"><i class="bi bi-tags"></i> Categorias</h6>
+                    <div class="form-check mb-2">
+                        <input type="checkbox" id="selectAllCategorias" class="form-check-input" checked>
+                        <label class="form-check-label fw-bold small text-muted">Selecionar Todas</label>
+                    </div>
+                    <div id="categoriasCheckboxes" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
+                <!-- Coluna 3: Tipo e Ações -->
+                <div class="col-md-3">
+                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2"><i class="bi bi-arrow-down-up"></i> Tipo</h6>
+                    <div class="btn-group w-100 mb-4" role="group">
+                        <input type="radio" class="btn-check" name="tipoTransacao" id="tipoTodas" value="todas" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="tipoTodas">Todas</label>
+
+                        <input type="radio" class="btn-check" name="tipoTransacao" id="tipoReceitas" value="R">
+                        <label class="btn btn-outline-success btn-sm" for="tipoReceitas">Receitas</label>
+
+                        <input type="radio" class="btn-check" name="tipoTransacao" id="tipoDespesas" value="D">
+                        <label class="btn btn-outline-danger btn-sm" for="tipoDespesas">Despesas</label>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="button" id="btnAplicarFiltros" class="btn btn-primary">
+                            Aplicar Filtros
+                        </button>
+                        <button type="button" id="btnLimparFiltros" class="btn btn-outline-secondary btn-sm">
+                            Limpar Tudo
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
-        <div class="col text-end">
-             <!-- Botão Adicionar movido para Navbar/Extrato -->
-        </div>
-    </form>
+    </div>
 
     <!-- Indicador de Carregamento -->
     <div id="loading" class="text-center my-5" style="display: none;">
@@ -128,11 +211,14 @@
 <script>
 document.addEventListener("DOMContentLoaded", function() {
     // --- 1. INICIALIZAÇÃO ---
-    const filtrosForm = document.getElementById('filtrosForm');
     const loadingDiv = document.getElementById('loading');
     const conteudoDiv = document.getElementById('conteudo');
 
     let chartFluxo, chartReceitasCat, chartDespesasCat;
+    
+    // Estado para memória de seleção manual
+    let manualSelectionContas = new Set();
+    let manualSelectionCategorias = new Set();
 
     // --- 2. FUNÇÕES DE RENDERIZAÇÃO ---
     function formatarMoeda(valor) {
@@ -141,7 +227,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
     function renderizarResumo(data) {
         const saldoEl = document.getElementById('saldo');
-        // Usa o saldo acumulado real (caixa atual) se disponível, senão usa o do período
         const saldoExibir = data.saldo_caixa_atual !== undefined ? data.saldo_caixa_atual : data.saldo;
         
         saldoEl.textContent = formatarMoeda(saldoExibir);
@@ -219,9 +304,124 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    // --- 3. BUSCAR DADOS (VERSÃO SEGURA - SEM JWT) ---
+    // --- 3. CARREGAR CONTAS E CATEGORIAS ---
+    async function carregarFiltros() {
+        try {
+            const [contasRes, categoriasRes] = await Promise.all([
+                fetch('/api/contas/', { credentials: 'same-origin' }),
+                fetch('/api/categorias/', { credentials: 'same-origin' })
+            ]);
 
-    // ✅ Pega o CSRF token do cookie (Django injeta automaticamente)
+            const contas = await contasRes.json();
+            const categorias = await categoriasRes.json();
+
+            renderizarCheckboxes('contasCheckboxes', contas, 'conta');
+            renderizarCheckboxes('categoriasCheckboxes', categorias, 'categoria');
+
+            setupSelectAll('selectAllContas', 'conta-checkbox', manualSelectionContas);
+            setupSelectAll('selectAllCategorias', 'categoria-checkbox', manualSelectionCategorias);
+        } catch (error) {
+            console.error('Erro ao carregar filtros:', error);
+        }
+    }
+
+    function renderizarCheckboxes(containerId, items, prefix) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = items.map(item => `
+            <div class="form-check">
+                <input type="checkbox" class="form-check-input ${prefix}-checkbox" 
+                       id="${prefix}-${item.id}" value="${item.id}" checked>
+                <label class="form-check-label small" for="${prefix}-${item.id}">
+                    ${item.nome}
+                </label>
+            </div>
+        `).join('');
+    }
+
+    // --- 4. LÓGICA "SELECIONAR TODAS" COM MEMÓRIA ---
+    function setupSelectAll(selectAllId, checkboxClass, manualSet) {
+        const selectAll = document.getElementById(selectAllId);
+        
+        selectAll.addEventListener('change', (e) => {
+            const checkboxes = document.querySelectorAll(`.${checkboxClass}`);
+            
+            if (e.target.checked) {
+                // Se tinha seleção manual, restaura
+                if (manualSet.size > 0) {
+                    checkboxes.forEach(cb => {
+                        cb.checked = manualSet.has(cb.value);
+                    });
+                    manualSet.clear(); // Limpa após restaurar
+                } else {
+                    // Senão, marca todas
+                    checkboxes.forEach(cb => cb.checked = true);
+                }
+            } else {
+                // Salva estado atual antes de desmarcar
+                checkboxes.forEach(cb => {
+                    if (cb.checked) manualSet.add(cb.value);
+                });
+                // Desmarca todas
+                checkboxes.forEach(cb => cb.checked = false);
+            }
+        });
+        
+        // Monitora mudanças individuais para atualizar "Selecionar Todas"
+        document.addEventListener('change', (e) => {
+            if (e.target.classList.contains(checkboxClass)) {
+                const allChecked = [...document.querySelectorAll(`.${checkboxClass}`)]
+                    .every(cb => cb.checked);
+                selectAll.checked = allChecked;
+            }
+        });
+    }
+
+    // --- 5. CONSTRUIR QUERY STRING ---
+    function construirFiltros() {
+        const params = new URLSearchParams();
+        
+        // Período
+        const dataInicio = document.getElementById('dataInicio').value;
+        const dataFim = document.getElementById('dataFim').value;
+        
+        if (dataInicio || dataFim) {
+            // Prioridade: Data customizada (parcial ou completa)
+            if (dataInicio) params.append('data_inicio', dataInicio);
+            if (dataFim) params.append('data_fim', dataFim);
+        } else {
+            // Fallback: Ano/Mês
+            const anoInteiro = document.getElementById('chkAno').checked;
+            params.append('ano', document.getElementById('filtroAno').value);
+            if (!anoInteiro) {
+                params.append('mes', document.getElementById('filtroMes').value);
+            }
+            params.append('ano_inteiro', anoInteiro);
+        }
+        
+        // Contas selecionadas
+        const contasSelecionadas = [...document.querySelectorAll('.conta-checkbox:checked')]
+            .map(cb => cb.value);
+        if (contasSelecionadas.length > 0) {
+            params.append('contas', contasSelecionadas.join(','));
+        }
+        
+        // Categorias selecionadas
+        const categoriasSelecionadas = [...document.querySelectorAll('.categoria-checkbox:checked')]
+            .map(cb => cb.value);
+        if (categoriasSelecionadas.length > 0) {
+            params.append('categorias', categoriasSelecionadas.join(','));
+        }
+        
+        // Tipo de transação
+        const tipo = document.querySelector('input[name="tipoTransacao"]:checked').value;
+        if (tipo !== 'todas') {
+            params.append('tipo', tipo);
+        }
+        
+        return params.toString();
+    }
+
+    // --- 6. BUSCAR DADOS ---
     function getCookie(name) {
         let cookieValue = null;
         if (document.cookie && document.cookie !== '') {
@@ -241,27 +441,24 @@ document.addEventListener("DOMContentLoaded", function() {
         loadingDiv.style.display = 'block';
         conteudoDiv.style.visibility = 'hidden';
 
-        const ano = document.getElementById('filtroAno').value;
-        const mes = document.getElementById('filtroMes').value;
+        // Desabilita mês se "Ano Inteiro" estiver marcado
         const anoInteiro = document.getElementById('chkAno').checked;
         document.getElementById('filtroMes').disabled = anoInteiro;
 
-        const url = `{% url 'transacoes_api' %}?ano=${ano}&mes=${mes}&ano_inteiro=${anoInteiro}`;
+        const queryString = construirFiltros();
+        const url = `{% url 'transacoes_api' %}?${queryString}`;
 
         try {
-            // ✅ FETCH SEGURO: Usa cookie de sessão automaticamente
-            // Não precisa de Authorization header, o navegador envia o cookie sessionid
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'X-CSRFToken': getCookie('csrftoken'),  // CSRF protection
+                    'X-CSRFToken': getCookie('csrftoken'),
                     'Content-Type': 'application/json'
                 },
-                credentials: 'same-origin'  // ✅ IMPORTANTE: Envia cookies
+                credentials: 'same-origin'
             });
 
             if (response.status === 403) {
-                // Se não estiver autenticado, redireciona para login
                 window.location.href = "{% url 'login' %}?next=" + window.location.pathname;
                 return;
             }
@@ -287,17 +484,54 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     }
 
-    // --- 4. EVENTOS ---
-    filtrosForm.addEventListener('change', buscarDados);
+    // --- 7. EVENTOS ---
+    
+    // Auto Refresh para filtros de data/período
+    document.querySelectorAll('.auto-refresh').forEach(el => {
+        el.addEventListener('change', buscarDados);
+    });
+
+    // Botão Limpar Datas (apenas datas customizadas)
+    document.getElementById('btnLimparDatas').addEventListener('click', () => {
+        document.getElementById('dataInicio').value = '';
+        document.getElementById('dataFim').value = '';
+        buscarDados();
+    });
+
+    // Filtros Avançados (Botão Aplicar)
+    document.getElementById('btnAplicarFiltros').addEventListener('click', buscarDados);
+    
+    document.getElementById('btnLimparFiltros').addEventListener('click', () => {
+        // Limpa datas customizadas
+        document.getElementById('dataInicio').value = '';
+        document.getElementById('dataFim').value = '';
+        
+        // Marca todas as contas e categorias
+        document.querySelectorAll('.conta-checkbox').forEach(cb => cb.checked = true);
+        document.querySelectorAll('.categoria-checkbox').forEach(cb => cb.checked = true);
+        document.getElementById('selectAllContas').checked = true;
+        document.getElementById('selectAllCategorias').checked = true;
+        
+        // Limpa memória
+        manualSelectionContas.clear();
+        manualSelectionCategorias.clear();
+        
+        // Reseta tipo
+        document.getElementById('tipoTodas').checked = true;
+        
+        // Recarrega
+        buscarDados();
+    });
 
     // Evento customizado para atualização via Chatbot
     document.addEventListener('transactionCreated', () => {
         buscarDados();
-        // Feedback visual opcional (Toast ou similar)
     });
 
-    // Carrega os dados ao abrir a página
-    buscarDados();
+    // --- 8. INICIALIZAÇÃO ---
+    carregarFiltros().then(() => {
+        buscarDados();
+    });
 });
 </script>
 
