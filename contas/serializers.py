@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Sum
 from datetime import datetime
-from .models import Transacao, Categoria, Conta
+from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -36,17 +36,47 @@ class ContaSerializer(serializers.ModelSerializer):
         return float(obj.saldo_inicial + receitas - despesas)
 
 
+class FaturaCreditoSerializer(serializers.ModelSerializer):
+    """Serializer para Faturas"""
+    status = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FaturaCredito
+        fields = ['id', 'mes_referencia', 'data_fechamento', 'data_vencimento', 'valor_total', 'paga', 'data_pagamento', 'status']
+
+    def get_status(self, obj):
+        hoje = datetime.now().date()
+        if obj.paga:
+            return "Paga"
+        elif hoje > obj.data_vencimento:
+            return "Atrasada"
+        elif hoje > obj.data_fechamento:
+            return "Fechada"
+        else:
+            return "Aberta"
+
+
+class CartaoCreditoSerializer(serializers.ModelSerializer):
+    """Serializer para Cartões de Crédito"""
+    class Meta:
+        model = CartaoCredito
+        fields = ['id', 'nome', 'limite', 'dia_fechamento', 'dia_vencimento', 'conta_pagamento', 'bandeira', 'ativo']
+        read_only_fields = ['id']
+
+
 class TransacaoSerializer(serializers.ModelSerializer):
     """Serializer para Transações (Leitura/Escrita Padrão)"""
     categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
-    conta_nome = serializers.CharField(source='conta.nome', read_only=True)
+    conta_nome = serializers.CharField(source='conta.nome', read_only=True, allow_null=True)
+    cartao_nome = serializers.CharField(source='cartao.nome', read_only=True, allow_null=True)
 
     class Meta:
         model = Transacao
         fields = [
             'id', 'data', 'descricao', 'valor', 'tipo',
             'categoria', 'categoria_nome',
-            'conta', 'conta_nome'
+            'conta', 'conta_nome',
+            'cartao', 'cartao_nome'
         ]
         read_only_fields = ['id']
 

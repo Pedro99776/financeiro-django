@@ -5,8 +5,8 @@ from django.db.models import Sum
 from django.db import IntegrityError
 from datetime import date, datetime
 
-from .models import Transacao, Categoria, Conta
-from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm
+from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
+from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm, CartaoCreditoForm
 from .utils import importar_extrato_com_ia
 from .serializers import TransacaoSerializer
 from .chatbot import gerar_resposta_chatbot, limpar_historico_chat
@@ -95,9 +95,10 @@ def transacoes_api(request):
     request.session['filtro_ano_inteiro'] = eh_ano_inteiro
 
     # --- 2. QUERYSET PRINCIPAL ---
-    # ✅ SEGURANÇA: Filtra apenas transações das contas do usuário logado
-    transacoes_qs = Transacao.objects.select_related('categoria', 'conta').filter(
-        conta__usuario=request.user  # ✅ FILTRO CRÍTICO
+    # ✅ SEGURANÇA: Filtra transações das contas OU cartões do usuário logado
+    from django.db.models import Q
+    transacoes_qs = Transacao.objects.select_related('categoria', 'conta', 'cartao').filter(
+        Q(conta__usuario=request.user) | Q(cartao__usuario=request.user)
     ).order_by('-data')
 
     # Aplicar filtro de período (Data customizada tem prioridade)
@@ -116,14 +117,25 @@ def transacoes_api(request):
         if not eh_ano_inteiro:
             transacoes_qs = transacoes_qs.filter(data__month=mes_filtrado)
 
-    # Filtrar por contas específicas
-    if contas_ids:
-        try:
-            ids_list = [int(id.strip()) for id in contas_ids.split(',') if id.strip()]
-            transacoes_qs = transacoes_qs.filter(conta_id__in=ids_list)
-        except ValueError:
-            pass  # Ignora IDs inválidos
+    # Filtrar por contas e cartões específicos
+    if contas_ids or request.GET.get('cartoes'):
+        q_filtro = Q()
+        
+        if contas_ids:
+            try:
+                ids_contas = [int(id.strip()) for id in contas_ids.split(',') if id.strip()]
+                q_filtro |= Q(conta_id__in=ids_contas)
+            except ValueError: pass
 
+        cartoes_ids = request.GET.get('cartoes')
+        if cartoes_ids:
+            try:
+                ids_cartoes = [int(id.strip()) for id in cartoes_ids.split(',') if id.strip()]
+                q_filtro |= Q(cartao_id__in=ids_cartoes)
+            except ValueError: pass
+            
+        transacoes_qs = transacoes_qs.filter(q_filtro)
+    
     # Filtrar por categorias específicas
     if categorias_ids:
         try:
@@ -131,7 +143,7 @@ def transacoes_api(request):
             transacoes_qs = transacoes_qs.filter(categoria_id__in=ids_list)
         except ValueError:
             pass
-
+    
     # Filtrar por tipo de transação
     if tipo_transacao in ['R', 'D']:
         transacoes_qs = transacoes_qs.filter(tipo=tipo_transacao)
@@ -202,13 +214,20 @@ def transacoes_api(request):
     
     saldo_caixa_atual = total_inicial + hist_receitas - hist_despesas
 
+    # --- 6.1 FATURAS EM ABERTO ---
+    faturas_aberto = FaturaCredito.objects.filter(
+        cartao__usuario=request.user, 
+        paga=False
+    ).aggregate(Sum('valor_total'))['valor_total__sum'] or 0
+
     # --- 7. SERIALIZER E RESPOSTA ---
     serializer = TransacaoSerializer(transacoes_qs, many=True)
 
     return Response({
         'transacoes': serializer.data,
         'saldo': saldo, # Saldo do período
-        'saldo_caixa_atual': saldo_caixa_atual, # Saldo total acumulado (real)
+        'saldo_caixa_atual': saldo_caixa_atual, # Saldo Bancário
+        'faturas_aberto': faturas_aberto, # Total de Faturas
         'total_receitas': total_receitas,
         'total_despesas': total_despesas,
         'grafico_labels': grafico_labels,
@@ -242,6 +261,14 @@ def listagem_transacoes(request):
 
 @login_required
 def nova_transacao(request):
+    # Verifica inicial: Usuário tem onde lançar?
+    tem_conta = Conta.objects.filter(usuario=request.user).exists()
+    tem_cartao = CartaoCredito.objects.filter(usuario=request.user).exists()
+
+    if not tem_conta and not tem_cartao:
+        messages.warning(request, "Você precisa criar uma Conta ou Cartão antes de lançar transações! Redirecionamos você para o gerenciamento.")
+        return redirect('gerenciar')
+
     if request.method == 'POST':
         # ✅ CORREÇÃO: Passa o usuário para o form
         form = TransacaoForm(request.POST, user=request.user)
@@ -252,12 +279,14 @@ def nova_transacao(request):
             transacao.save()
             messages.success(request, "Transação adicionada com sucesso!")
             return redirect('listagem')
+        else:
+            # Feedback explícito em caso de erro no POST
+            messages.error(request, "Erro ao salvar transação. Verifique os campos e tente novamente.")
     else:
         # ✅ CORREÇÃO: Passa o usuário para o form
         form = TransacaoForm(user=request.user)
 
     return render(request, 'contas/form_transacao.html', {'form': form})
-
 
 @login_required
 def update_transacao(request, pk):
@@ -273,7 +302,7 @@ def update_transacao(request, pk):
     else:
         form = TransacaoForm(instance=transacao, user=request.user)
 
-    return render(request, 'contas/form.html', {'form': form})
+    return render(request, 'contas/form_transacao.html', {'form': form})
 
 
 @login_required
@@ -443,3 +472,13 @@ def gerenciar(request):
     O frontend (gerenciar.html) se comunica via API.
     """
     return render(request, 'contas/gerenciar.html', {'nbar': 'gerenciar'})
+
+
+@login_required
+def faturas(request):
+    """
+    Renderiza a página de Faturas.
+    """
+    return render(request, 'contas/faturas.html', {'nbar': 'faturas'})
+
+

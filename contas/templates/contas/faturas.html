@@ -1,0 +1,302 @@
+{% extends 'contas/base.html' %}
+{% load humanize %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="text-primary fw-bold"><i class="bi bi-receipt"></i> Faturas</h2>
+        
+        <div class="d-flex gap-2 align-items-center">
+            <label for="selectCartao" class="form-label mb-0 fw-bold text-muted">Cartão:</label>
+            <select id="selectCartao" class="form-select" style="min-width: 200px;">
+                <!-- Preenchido via JS -->
+            </select>
+        </div>
+    </div>
+
+    <!-- Navegação de Meses -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <button id="btnPrevMonth" class="btn btn-outline-secondary btn-sm"><i class="bi bi-chevron-left"></i> Anterior</button>
+                <h5 id="labelMes" class="mb-0 fw-bold text-capitalize text-primary">Carregando...</h5>
+                <button id="btnNextMonth" class="btn btn-outline-secondary btn-sm">Próximo <i class="bi bi-chevron-right"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="text-center my-5" style="display: none;">
+        <div class="spinner-border text-primary" role="status"></div>
+    </div>
+
+    <!-- Conteúdo Fatura -->
+    <div id="faturaConteudo" style="display: none;">
+        
+        <!-- Resumo -->
+        <div class="row mb-4">
+            <div class="col-md-12">
+                <div class="card border-0 shadow-sm bg-aliceblue">
+                    <div class="card-body p-4">
+                        <div class="row align-items-center">
+                            <div class="col-md-3 text-center border-end">
+                                <small class="text-muted text-uppercase fw-bold">Valor Total</small>
+                                <h2 id="faturaValor" class="fw-bold text-dark mb-0">R$ 0,00</h2>
+                            </div>
+                            <div class="col-md-3 text-center border-end">
+                                <small class="text-muted text-uppercase fw-bold">Status</small>
+                                <h4 id="faturaStatus" class="fw-bold mb-0">-</h4>
+                            </div>
+                            <div class="col-md-3 text-center border-end">
+                                <small class="text-muted text-uppercase fw-bold">Vencimento</small>
+                                <h5 id="faturaVencimento" class="fw-bold text-dark mb-0">-</h5>
+                            </div>
+                            <div class="col-md-3 text-center">
+                                <button id="btnPagarFatura" class="btn btn-success w-100 py-2"><i class="bi bi-check-circle"></i> Pagar Fatura</button>
+                                <div id="msgPaga" class="text-success fw-bold" style="display:none;"><i class="bi bi-check-all"></i> Paga em <span id="dataPagamento"></span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transações -->
+        <h5 class="fw-bold text-muted mb-3"><i class="bi bi-list-ul"></i> Detalhes da Fatura</h5>
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Data</th>
+                            <th>Descrição</th>
+                            <th>Categoria</th>
+                            <th class="text-end">Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabelaTransacoes">
+                        <!-- JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="msgSemFatura" class="alert alert-info text-center my-5" style="display: none;">
+        <i class="bi bi-info-circle display-4 d-block mb-3"></i>
+        Nenhuma fatura encontrada para este mês.
+    </div>
+
+</div>
+
+<!-- Modal Pagamento -->
+<div class="modal fade" id="modalPagamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Pagar Fatura</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Selecione a conta para debitar o pagamento:</p>
+                <select id="selectContaPagamento" class="form-select mb-3"></select>
+                <div class="alert alert-warning small">
+                    <i class="bi bi-exclamation-triangle"></i> O pagamento será registrado como uma despesa na conta selecionada.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmarPagamento" class="btn btn-success">Confirmar Pagamento</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    let currentDate = new Date();
+    let currentCartaoId = null;
+    let currentFatura = null;
+    
+    const selectCartao = document.getElementById('selectCartao');
+    const labelMes = document.getElementById('labelMes');
+    const loading = document.getElementById('loading');
+    const conteudo = document.getElementById('faturaConteudo');
+    const msgSemFatura = document.getElementById('msgSemFatura');
+    const btnPagar = document.getElementById('btnPagarFatura');
+    const msgPaga = document.getElementById('msgPaga');
+    
+    // 1. Load Cartoes
+    fetch('/api/cartoes/', {credentials: 'same-origin'})
+    .then(r => r.json())
+    .then(cartoes => {
+        if(cartoes.length === 0) {
+            alert('Você não possui cartões cadastrados.');
+            return;
+        }
+        selectCartao.innerHTML = cartoes.map(c => `<option value="${c.id}">${c.nome}</option>`).join('');
+        currentCartaoId = cartoes[0].id; // Select first
+        loadFatura();
+    });
+    
+    selectCartao.addEventListener('change', (e) => {
+        currentCartaoId = e.target.value;
+        loadFatura();
+    });
+
+    // 2. Navigation
+    document.getElementById('btnPrevMonth').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        loadFatura();
+    });
+    
+    document.getElementById('btnNextMonth').addEventListener('click', () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        loadFatura();
+    });
+
+    // 3. Load Fatura
+    function loadFatura() {
+        if(!currentCartaoId) return;
+        
+        // Update Label
+        const mesAno = currentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+        labelMes.textContent = mesAno;
+        
+        loading.style.display = 'block';
+        conteudo.style.display = 'none';
+        msgSemFatura.style.display = 'none';
+        
+        // Format YYYY-MM
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const mesFilter = `${year}-${month}`;
+        
+        fetch(`/api/faturas/?cartao=${currentCartaoId}&mes=${mesFilter}`, {credentials: 'same-origin'})
+        .then(r => r.json())
+        .then(faturas => {
+            if(faturas.length === 0) {
+                loading.style.display = 'none';
+                msgSemFatura.style.display = 'block';
+                return;
+            }
+            
+            // Assume 1 fatura per month per card
+            currentFatura = faturas[0];
+            renderFatura(currentFatura);
+            loadTransacoes(currentFatura.id);
+        })
+        .catch(err => {
+            console.error(err);
+            loading.style.display = 'none';
+        });
+    }
+
+    function renderFatura(fatura) {
+        document.getElementById('faturaValor').textContent = fatura.valor_total.toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'});
+        
+        const statusEl = document.getElementById('faturaStatus');
+        statusEl.textContent = fatura.status;
+        
+        // Style status
+        statusEl.className = 'fw-bold mb-0';
+        if(fatura.status === 'Paga') statusEl.classList.add('text-success');
+        else if(fatura.status === 'Atrasada') statusEl.classList.add('text-danger');
+        else if(fatura.status === 'Fechada') statusEl.classList.add('text-warning');
+        else statusEl.classList.add('text-primary');
+        
+        document.getElementById('faturaVencimento').textContent = new Date(fatura.data_vencimento + 'T00:00:00').toLocaleDateString('pt-BR');
+        
+        if(fatura.paga) {
+            btnPagar.style.display = 'none';
+            msgPaga.style.display = 'block';
+            document.getElementById('dataPagamento').textContent = new Date(fatura.data_pagamento + 'T00:00:00').toLocaleDateString('pt-BR');
+        } else {
+            btnPagar.style.display = fatura.status === 'Aberta' ? 'none' : 'block'; // Can pay if Closed or Overdue? Or even Open? Typically Closed.
+            // Let's allow paying anytime if user wants, but Logic says "Fechada" is best.
+            // "Aberta" invoice usually changes value.
+            // Let's show button mostly if Closed/Atrasada.
+            // User requested: "opções para ver faturas... e qualquer outra funcionalidade".
+            // If user wants to prepay, it's possible. But simpler: Enable always if not paid.
+            btnPagar.style.display = 'block'; 
+            btnPagar.disabled = fatura.status === 'Aberta'; // Disable if Open?
+            if(fatura.status === 'Aberta') btnPagar.textContent = 'Fatura Aberta (Aguarde Fechamento)';
+            else btnPagar.textContent = 'Pagar Fatura';
+            
+            msgPaga.style.display = 'none';
+        }
+        
+        conteudo.style.display = 'block';
+        loading.style.display = 'none';
+    }
+
+    function loadTransacoes(faturaId) {
+        fetch(`/api/transacoes/?fatura=${faturaId}`, {credentials: 'same-origin'})
+        .then(r => r.json())
+        .then(transacoes => {
+            const tbody = document.getElementById('tabelaTransacoes');
+            tbody.innerHTML = '';
+            
+            if(transacoes.length === 0) {
+                 tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3">Sem transações.</td></tr>';
+                 return;
+            }
+            
+            transacoes.forEach(t => {
+                const row = `
+                    <tr>
+                        <td>${new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                        <td>${t.descricao}</td>
+                        <td>${t.categoria_nome}</td>
+                        <td class="text-end fw-bold ${t.tipo === 'D' ? 'text-danger' : 'text-success'}">
+                            ${t.tipo === 'D' ? '-' : ''} R$ ${parseFloat(t.valor).toFixed(2)}
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        });
+    }
+
+    // Payment Logic
+    const modalPagamento = new bootstrap.Modal(document.getElementById('modalPagamento'));
+    
+    btnPagar.addEventListener('click', () => {
+         // Load Contas for payment
+         fetch('/api/contas/', {credentials: 'same-origin'})
+         .then(r => r.json())
+         .then(contas => {
+             const sel = document.getElementById('selectContaPagamento');
+             sel.innerHTML = contas.map(c => `<option value="${c.id}">${c.nome} (Saldo: R$ ${c.saldo_atual})</option>`).join('');
+             modalPagamento.show();
+         });
+    });
+    
+    document.getElementById('btnConfirmarPagamento').addEventListener('click', () => {
+         const contaId = document.getElementById('selectContaPagamento').value;
+         
+         const payload = {
+             conta_id: contaId
+         };
+         
+         fetch(`/api/faturas/${currentFatura.id}/pagar/`, {
+             method: 'POST', 
+             headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+             body: JSON.stringify(payload)
+         })
+         .then(async r => {
+             if(r.ok) {
+                 modalPagamento.hide();
+                 loadFatura(); // Reload status
+                 alert('Fatura paga com sucesso!');
+             } else {
+                 const err = await r.json();
+                 alert('Erro: ' + (err.error || 'Falha ao pagar'));
+             }
+         });
+    });
+
+});
+</script>
+{% endblock %}

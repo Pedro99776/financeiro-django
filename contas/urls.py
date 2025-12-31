@@ -8,6 +8,8 @@ router = DefaultRouter()
 router.register(r'api/transacoes', api_views.TransacaoViewSet, basename='api-transacao')
 router.register(r'api/categorias', api_views.CategoriaViewSet, basename='api-categoria')
 router.register(r'api/contas', api_views.ContaViewSet, basename='api-conta')
+router.register(r'api/cartoes', api_views.CartaoCreditoViewSet, basename='api-cartaocredito')
+router.register(r'api/faturas', api_views.FaturaViewSet, basename='api-fatura')
 router.register(r'api/analytics', api_views.AnalyticsViewSet, basename='api-analytics')
 
 urlpatterns = [
@@ -20,9 +22,10 @@ urlpatterns = [
     path('importar/', views.importar_extrato, name='importar_extrato'),
     path('logout/', LogoutView.as_view(next_page='login'), name='logout'), # Retained from original
 
-    # Endpoint legado para gráfico (pode ser substituído pelo api/analytics no futuro)
+    # Endpoint legado (pode ser substituído pelo api/analytics no futuro)
     path('transacoes-api/', views.transacoes_api, name='transacoes_api'),
     path('gerenciar/', views.gerenciar, name='gerenciar'),
+    path('faturas/', views.faturas, name='faturas'),
     
     # --- API DRF Router ---Endpoints
     path('api/chat/', views.chat_api, name='chat_api'),

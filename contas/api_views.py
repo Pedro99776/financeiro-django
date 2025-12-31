@@ -5,11 +5,12 @@ from django.db.models import Sum, Count, Q
 from datetime import datetime
 from decimal import Decimal
 
-from .models import Transacao, Categoria, Conta
+from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
 from .serializers import (
-    TransacaoSerializer, TransacaoCreateSerializer,
-    CategoriaSerializer, ContaSerializer,
-    ResumoFinanceiroSerializer, GastosPorCategoriaSerializer
+    TransacaoSerializer, TransacaoCreateSerializer, 
+    CategoriaSerializer, ContaSerializer, CartaoCreditoSerializer,
+    ResumoFinanceiroSerializer, GastosPorCategoriaSerializer,
+    FaturaCreditoSerializer
 )
 from .chatbot import limpar_cache_contexto
 
@@ -52,6 +53,64 @@ class ContaViewSet(BaseUserViewSet):
         return Response({'id': conta.id, 'nome': conta.nome, 'saldo_atual': serializer.data['saldo_atual']})
 
 
+class CartaoCreditoViewSet(BaseUserViewSet):
+    serializer_class = CartaoCreditoSerializer
+
+    def get_queryset(self):
+        return CartaoCredito.objects.filter(usuario=self.request.user).order_by('nome')
+
+
+class FaturaViewSet(BaseUserViewSet):
+    serializer_class = FaturaCreditoSerializer
+
+    def get_queryset(self):
+        qs = FaturaCredito.objects.filter(cartao__usuario=self.request.user).order_by('-mes_referencia')
+        
+        cartao_id = self.request.query_params.get('cartao')
+        if cartao_id:
+            qs = qs.filter(cartao_id=cartao_id)
+            
+        mes = self.request.query_params.get('mes') # YYYY-MM
+        if mes:
+            qs = qs.filter(mes_referencia__startswith=mes) # Simple logic for YYYY-MM-DD or YYYY-MM
+
+        return qs
+
+    @action(detail=True, methods=['post'])
+    def pagar(self, request, pk=None):
+        fatura = self.get_object()
+        if fatura.paga:
+             return Response({'error': 'Fatura já paga'}, status=400)
+             
+        conta_id = request.data.get('conta_id')
+        if not conta_id:
+             return Response({'error': 'Conta de pagamento necessária'}, status=400)
+             
+        # Lógica de Pagamento
+        conta = get_object_or_404(Conta, pk=conta_id, usuario=request.user)
+        
+        if conta.saldo_atual < fatura.valor_total:
+             # Opcional: Permitir saldo negativo? Sim.
+             pass
+             
+        # Criar Transação de Pagamento
+        Transacao.objects.create(
+            conta=conta,
+            descricao=f"Pagamento Fatura {fatura.cartao.nome}",
+            valor=fatura.valor_total,
+            tipo='D',
+            data=datetime.now().date(),
+            categoria=Categoria.objects.filter(usuario=request.user, nome="Pagamento de Cartão").first() # Ideal: Categoria 'Pagamento'
+        )
+        
+        fatura.paga = True
+        fatura.data_pagamento = datetime.now().date()
+        fatura.save()
+        
+        return Response({'status': 'Fatura paga com sucesso'})
+
+
+
 class TransacaoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -68,12 +127,17 @@ class TransacaoViewSet(viewsets.ModelViewSet):
         limpar_cache_contexto(self.request.user)
 
     def get_queryset(self):
-        queryset = Transacao.objects.filter(conta__usuario=self.request.user).order_by('-data')
+        # Fix: Usar Q object para incluir transações de cartão (sem conta)
+        queryset = Transacao.objects.filter(
+            Q(conta__usuario=self.request.user) | Q(cartao__usuario=self.request.user)
+        ).order_by('-data')
 
-        # Filtros para o Chatbot
+        # Filtros para o Chatbot e API de Faturas
         tipo = self.request.query_params.get('tipo')
         categoria = self.request.query_params.get('categoria')
         conta = self.request.query_params.get('conta')
+        cartao = self.request.query_params.get('cartao')
+        fatura = self.request.query_params.get('fatura')
         data_inicio = self.request.query_params.get('data_inicio')
         data_fim = self.request.query_params.get('data_fim')
 
@@ -85,6 +149,12 @@ class TransacaoViewSet(viewsets.ModelViewSet):
 
         if conta:
             queryset = queryset.filter(conta__nome__icontains=conta)
+            
+        if cartao:
+            queryset = queryset.filter(cartao__nome__icontains=cartao)
+            
+        if fatura:
+            queryset = queryset.filter(fatura_id=fatura)
 
         if data_inicio:
             queryset = queryset.filter(data__gte=data_inicio)

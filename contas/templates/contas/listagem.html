@@ -74,15 +74,30 @@
         <div class="card card-body border-0 shadow-sm bg-light">
             <div class="row g-4">
                 
-                <!-- Coluna 1: Contas -->
+                <!-- Coluna 1: Contas e Cartões -->
                 <div class="col-md-4">
-                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2"><i class="bi bi-wallet2"></i> Contas</h6>
-                    <div class="form-check mb-2">
-                        <input type="checkbox" id="selectAllContas" class="form-check-input" checked>
-                        <label class="form-check-label fw-bold small text-muted">Selecionar Todas</label>
+                    <h6 class="text-primary fw-bold mb-3 border-bottom pb-2"><i class="bi bi-wallet2"></i> Contas e Cartões</h6>
+                    
+                    <!-- Contas -->
+                    <div class="mb-3">
+                        <div class="form-check mb-1">
+                            <input type="checkbox" id="selectAllContas" class="form-check-input" checked>
+                            <label class="form-check-label fw-bold small text-muted">Todas as Contas</label>
+                        </div>
+                        <div id="contasCheckboxes" class="d-flex flex-column gap-1 ms-2" style="max-height: 100px; overflow-y: auto;">
+                            <!-- Preenchido via JS -->
+                        </div>
                     </div>
-                    <div id="contasCheckboxes" class="d-flex flex-column gap-1" style="max-height: 150px; overflow-y: auto;">
-                        <!-- Preenchido via JS -->
+
+                    <!-- Cartões -->
+                    <div>
+                        <div class="form-check mb-1">
+                            <input type="checkbox" id="selectAllCartoes" class="form-check-input" checked>
+                            <label class="form-check-label fw-bold small text-muted">Todos os Cartões</label>
+                        </div>
+                        <div id="cartoesCheckboxes" class="d-flex flex-column gap-1 ms-2" style="max-height: 100px; overflow-y: auto;">
+                            <!-- Preenchido via JS -->
+                        </div>
                     </div>
                 </div>
 
@@ -93,10 +108,11 @@
                         <input type="checkbox" id="selectAllCategorias" class="form-check-input" checked>
                         <label class="form-check-label fw-bold small text-muted">Selecionar Todas</label>
                     </div>
-                    <div id="categoriasCheckboxes" class="d-flex flex-wrap gap-3" style="max-height: 150px; overflow-y: auto;">
+                    <div id="categoriasCheckboxes" class="d-flex flex-wrap gap-3" style="max-height: 250px; overflow-y: auto;">
                         <!-- Preenchido via JS -->
                     </div>
                 </div>
+
 
                 <!-- Coluna 3: Tipo e Ações -->
                 <div class="col-md-3">
@@ -135,25 +151,56 @@
     <!-- Conteúdo Dinâmico -->
     <div id="conteudo" style="visibility: hidden;">
         <!-- Resumo Financeiro -->
-        <div class="text-center mb-5">
-            <h6 class="text-uppercase text-muted ls-1">Saldo em Caixa</h6>
-            <h1 id="saldo" class="display-3 fw-bold">R$ 0,00</h1>
-            <div class="row justify-content-center mt-4">
-                <div class="col-md-3">
-                    <div class="card border-0 bg-success bg-opacity-10">
-                        <div class="card-body text-center">
-                            <small class="text-success fw-bold text-uppercase">Receitas</small>
+        <!-- Resumo Financeiro (Novo Dashboard) -->
+        <div class="row mb-4 g-3">
+             <div class="col-md-4">
+                 <div class="card border-0 shadow-sm h-100 bg-primary bg-opacity-10">
+                     <div class="card-body text-center">
+                         <h6 class="text-uppercase text-primary fw-bold ls-1 mb-2">Saldo em Contas</h6>
+                         <h3 id="saldoBanco" class="fw-bold text-primary mb-0">R$ 0,00</h3>
+                         <small class="text-muted">Disponível</small>
+                     </div>
+                 </div>
+             </div>
+             <div class="col-md-4">
+                 <div class="card border-0 shadow-sm h-100 bg-danger bg-opacity-10">
+                     <div class="card-body text-center">
+                         <h6 class="text-uppercase text-danger fw-bold ls-1 mb-2">Faturas em Aberto</h6>
+                         <h3 id="faturasAberto" class="fw-bold text-danger mb-0">R$ 0,00</h3>
+                         <small class="text-muted">À Pagar</small>
+                     </div>
+                 </div>
+             </div>
+             <div class="col-md-4">
+                 <div class="card border-0 shadow-sm h-100 bg-secondary bg-opacity-10">
+                     <div class="card-body text-center">
+                         <h6 class="text-uppercase text-secondary fw-bold ls-1 mb-2">Saldo Líquido</h6>
+                         <h3 id="saldoLiquido" class="fw-bold text-dark mb-0">R$ 0,00</h3>
+                         <small class="text-muted">Previsto (Contas - Faturas)</small>
+                     </div>
+                 </div>
+             </div>
+        </div>
+
+        <div class="row justify-content-center mb-5">
+            <div class="col-md-6">
+                <div class="card border-0 shadow-sm">
+                     <div class="card-body d-flex justify-content-around align-items-center">
+                        <div class="text-center">
+                            <small class="text-success fw-bold text-uppercase">Receitas (Período)</small>
                             <h4 id="totalReceitas" class="text-success mb-0">R$ 0,00</h4>
                         </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card border-0 bg-danger bg-opacity-10">
-                        <div class="card-body text-center">
-                            <small class="text-danger fw-bold text-uppercase">Despesas</small>
+                        <div class="vr"></div>
+                        <div class="text-center">
+                            <small class="text-danger fw-bold text-uppercase">Despesas (Período)</small>
                             <h4 id="totalDespesas" class="text-danger mb-0">R$ 0,00</h4>
                         </div>
-                    </div>
+                        <div class="vr"></div>
+                        <div class="text-center">
+                            <small class="text-primary fw-bold text-uppercase">Saldo (Período)</small>
+                            <h4 id="saldoPeriodo" class="text-primary mb-0">R$ 0,00</h4>
+                        </div>
+                     </div>
                 </div>
             </div>
         </div>
@@ -219,6 +266,7 @@ document.addEventListener("DOMContentLoaded", function() {
     // Estado para memória de seleção manual
     let manualSelectionContas = new Set();
     let manualSelectionCategorias = new Set();
+    let manualSelectionCartoes = new Set();
 
     // --- 2. FUNÇÕES DE RENDERIZAÇÃO ---
     function formatarMoeda(valor) {
@@ -226,13 +274,17 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     function renderizarResumo(data) {
-        const saldoEl = document.getElementById('saldo');
-        const saldoExibir = data.saldo_caixa_atual !== undefined ? data.saldo_caixa_atual : data.saldo;
+        // Dashboard Cards
+        document.getElementById('saldoBanco').textContent = formatarMoeda(data.saldo_caixa_atual);
+        document.getElementById('faturasAberto').textContent = formatarMoeda(data.faturas_aberto);
         
-        saldoEl.textContent = formatarMoeda(saldoExibir);
-        saldoEl.className = `display-3 fw-bold ${saldoExibir < 0 ? 'text-danger' : 'text-primary'}`;
+        const saldoLiq = data.saldo_caixa_atual - data.faturas_aberto;
+        document.getElementById('saldoLiquido').textContent = formatarMoeda(saldoLiq);
+        
+        // Period Stats
         document.getElementById('totalReceitas').textContent = formatarMoeda(data.total_receitas);
         document.getElementById('totalDespesas').textContent = formatarMoeda(data.total_despesas);
+        document.getElementById('saldoPeriodo').textContent = formatarMoeda(data.saldo);
     }
 
     function renderizarTabela(transacoes) {
@@ -250,12 +302,14 @@ document.addEventListener("DOMContentLoaded", function() {
             const sinal = t.tipo === 'D' ? '-' : '';
             const dataFormatada = new Date(t.data + 'T00:00:00').toLocaleDateString('pt-BR');
 
+            const origem = t.cartao_nome ? `<i class="bi bi-credit-card"></i> ${t.cartao_nome}` : t.conta_nome;
+            
             const row = `
                 <tr>
                     <td class="text-muted" style="width: 120px;">${dataFormatada}</td>
                     <td class="fw-bold text-dark">${t.descricao || '-'}</td>
                     <td><span class="badge bg-light text-dark border">${t.categoria_nome}</span></td>
-                    <td class="small text-muted">${t.conta_nome}</td>
+                    <td class="small text-muted">${origem}</td>
                     <td class="text-end fw-bold ${classeValor}">
                         ${sinal} ${valorFormatado}
                     </td>
@@ -304,21 +358,25 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
 
-    // --- 3. CARREGAR CONTAS E CATEGORIAS ---
+    // --- 3. CARREGAR CONTAS, CARTÕES E CATEGORIAS ---
     async function carregarFiltros() {
         try {
-            const [contasRes, categoriasRes] = await Promise.all([
+            const [contasRes, cartoesRes, categoriasRes] = await Promise.all([
                 fetch('/api/contas/', { credentials: 'same-origin' }),
+                fetch('/api/cartoes/', { credentials: 'same-origin' }),
                 fetch('/api/categorias/', { credentials: 'same-origin' })
             ]);
 
             const contas = await contasRes.json();
+            const cartoes = await cartoesRes.json();
             const categorias = await categoriasRes.json();
 
             renderizarCheckboxes('contasCheckboxes', contas, 'conta');
+            renderizarCheckboxes('cartoesCheckboxes', cartoes, 'cartao');
             renderizarCheckboxes('categoriasCheckboxes', categorias, 'categoria');
 
             setupSelectAll('selectAllContas', 'conta-checkbox', manualSelectionContas);
+            setupSelectAll('selectAllCartoes', 'cartao-checkbox', manualSelectionCartoes);
             setupSelectAll('selectAllCategorias', 'categoria-checkbox', manualSelectionCategorias);
         } catch (error) {
             console.error('Erro ao carregar filtros:', error);
@@ -403,6 +461,13 @@ document.addEventListener("DOMContentLoaded", function() {
             .map(cb => cb.value);
         if (contasSelecionadas.length > 0) {
             params.append('contas', contasSelecionadas.join(','));
+        }
+
+        // Cartões selecionados
+        const cartoesSelecionados = [...document.querySelectorAll('.cartao-checkbox:checked')]
+            .map(cb => cb.value);
+        if (cartoesSelecionados.length > 0) {
+            params.append('cartoes', cartoesSelecionados.join(','));
         }
         
         // Categorias selecionadas
@@ -506,14 +571,17 @@ document.addEventListener("DOMContentLoaded", function() {
         document.getElementById('dataInicio').value = '';
         document.getElementById('dataFim').value = '';
         
-        // Marca todas as contas e categorias
+        // Marca todas as contas, cartões e categorias
         document.querySelectorAll('.conta-checkbox').forEach(cb => cb.checked = true);
+        document.querySelectorAll('.cartao-checkbox').forEach(cb => cb.checked = true);
         document.querySelectorAll('.categoria-checkbox').forEach(cb => cb.checked = true);
         document.getElementById('selectAllContas').checked = true;
+        document.getElementById('selectAllCartoes').checked = true;
         document.getElementById('selectAllCategorias').checked = true;
         
         // Limpa memória
         manualSelectionContas.clear();
+        manualSelectionCartoes.clear();
         manualSelectionCategorias.clear();
         
         // Reseta tipo

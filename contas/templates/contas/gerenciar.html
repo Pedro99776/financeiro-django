@@ -15,6 +15,9 @@
         <li class="nav-item" role="presentation">
             <button class="nav-link" id="contas-tab" data-bs-toggle="tab" data-bs-target="#contas-content" type="button" role="tab">Contas</button>
         </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="cartoes-tab" data-bs-toggle="tab" data-bs-target="#cartoes-content" type="button" role="tab">Cartões</button>
+        </li>
     </ul>
 
     <!-- Tab Content -->
@@ -22,6 +25,7 @@
         
         <!-- Categorias Tab -->
         <div class="tab-pane fade show active" id="cats-content" role="tabpanel">
+            <!-- (Conteúdo Categorias Mantido) -->
             <div class="row">
                 <div class="col-md-4 mb-4">
                     <div class="card shadow-sm border-0">
@@ -65,6 +69,7 @@
 
         <!-- Contas Tab -->
         <div class="tab-pane fade" id="contas-content" role="tabpanel">
+             <!-- (Conteúdo Contas Mantido - apenas wrapper) -->
             <div class="row">
                 <div class="col-md-4 mb-4">
                     <div class="card shadow-sm border-0">
@@ -115,32 +120,106 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
-    <!-- Hidden CSRF Token Container -->
-    <div id="csrf-container" class="d-none">
-        {% csrf_token %}
-    </div>
-
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="deleteModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Confirmar Exclusão</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <!-- Cartões Tab -->
+        <div class="tab-pane fade" id="cartoes-content" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-header bg-white fw-bold">Novo Cartão</div>
+                        <div class="card-body">
+                            <form id="formCartao">
+                                <input type="hidden" id="cartaoId">
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Nome</label>
+                                    <input type="text" class="form-control" id="cartaoNome" placeholder="Ex: Nubank Platinum" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Limite (R$)</label>
+                                    <input type="number" step="0.01" class="form-control" id="cartaoLimite" placeholder="0.00" required>
+                                </div>
+                                <div class="row">
+                                    <div class="col-6 mb-3">
+                                        <label class="form-label small text-muted">Dia de Fechamento</label>
+                                        <input type="number" min="1" max="31" class="form-control" id="cartaoFechamento" required>
+                                    </div>
+                                    <div class="col-6 mb-3">
+                                        <label class="form-label small text-muted">Dia de Vencimento</label>
+                                        <input type="number" min="1" max="31" class="form-control" id="cartaoVencimento" required>
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Bandeira</label>
+                                    <select class="form-select" id="cartaoBandeira">
+                                        <option value="MASTERCARD">Mastercard</option>
+                                        <option value="VISA">Visa</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small text-muted">Conta Pagamento</label>
+                                    <select class="form-select" id="cartaoConta">
+                                        <option value="">Selecione...</option>
+                                        <!-- JS preenche -->
+                                    </select>
+                                </div>
+                                <div class="d-grid gap-2">
+                                    <button type="submit" class="btn btn-primary" id="btnSaveCartao">Salvar</button>
+                                    <button type="button" class="btn btn-outline-secondary d-none" id="btnCancelCartao">Cancelar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-body">
-                    <p id="deleteMsg">Tem certeza?</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+                <div class="col-md-8">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Limite</th>
+                                            <th>Datas</th>
+                                            <th class="text-end" style="width: 100px;">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tabelaCartoes">
+                                        <!-- JS vai preencher -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+
     </div>
+</div>
+
+<!-- CSRF Token Container -->
+<div id="csrf-container" style="display:none;">
+    {% csrf_token %}
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="deleteMsg">Tem certeza?</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" id="btnConfirmDelete">Excluir</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
@@ -159,8 +238,7 @@ document.addEventListener("DOMContentLoaded", function() {
             'X-CSRFToken': getCsrfToken()
         };
     }
-
-    // --- MODAL LOGIC ---
+    // ... (Modal logic maintained) ...
     let deleteCallback = null;
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
     const btnConfirmDelete = document.getElementById('btnConfirmDelete');
@@ -180,8 +258,10 @@ document.addEventListener("DOMContentLoaded", function() {
     const tableCat = document.getElementById('tabelaCategorias');
     const formCat = document.getElementById('formCategoria');
     const btnCancelCat = document.getElementById('btnCancelCat');
-
+    // ... (functions loadCategorias, bindCatEvents, formCat submit, resetFormCat - reused) ...
+    
     function loadCategorias() {
+        if(!tableCat) return; // safety
         tableCat.innerHTML = '<tr><td colspan="2" class="text-center p-3">Carregando...</td></tr>';
         fetch('/api/categorias/')
             .then(r => r.json())
@@ -262,16 +342,32 @@ document.addEventListener("DOMContentLoaded", function() {
     }
 
     // --- CONTAS ---
+    // (Existing Account Logic + Hook for filling Cards dropdown)
     const tableConta = document.getElementById('tabelaContas');
     const formConta = document.getElementById('formConta');
     const btnCancelConta = document.getElementById('btnCancelConta');
+    const selectCartaoConta = document.getElementById('cartaoConta'); // For Cards
 
     function loadContas() {
+        if(!tableConta) return;
         tableConta.innerHTML = '<tr><td colspan="4" class="text-center p-3">Carregando...</td></tr>';
         fetch('/api/contas/')
             .then(r => r.json())
             .then(data => {
                 tableConta.innerHTML = '';
+                // Populate Dropdown for Cards
+                if(selectCartaoConta) {
+                    const currentVal = selectCartaoConta.value;
+                    selectCartaoConta.innerHTML = '<option value="">Selecione...</option>';
+                    data.forEach(c => {
+                        const opt = document.createElement('option');
+                        opt.value = c.id;
+                        opt.textContent = c.nome;
+                        selectCartaoConta.appendChild(opt);
+                    });
+                    selectCartaoConta.value = currentVal; // Restore if editing
+                }
+
                 if(data.length === 0) {
                      tableConta.innerHTML = '<tr><td colspan="4" class="text-center p-3 text-muted">Nenhuma conta encontrada.</td></tr>';
                      return;
@@ -298,6 +394,7 @@ document.addEventListener("DOMContentLoaded", function() {
             });
     }
 
+    // ... (bindContaEvents, formConta submit, resetFormConta logic reused) ...
     function bindContaEvents() {
         document.querySelectorAll('.btn-del-conta').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -339,24 +436,10 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         const method = id ? 'PUT' : 'POST';
         const url = id ? `/api/contas/${id}/` : '/api/contas/';
-
-        fetch(url, {
-            method: method,
-            headers: getHeaders(), // ✅ Dinâmico
-            body: JSON.stringify(payload),
-            credentials: 'same-origin'
-        }).then(r => {
-            if(r.ok) {
-                resetFormConta();
-                loadContas();
-            } else {
-                alert('Erro ao salvar conta.');
-            }
-        });
+        fetch(url, { method: method, headers: getHeaders(), body: JSON.stringify(payload), credentials: 'same-origin' })
+        .then(r => { if(r.ok) { resetFormConta(); loadContas(); } else { alert('Erro ao salvar conta.'); } });
     });
-
     btnCancelConta.addEventListener('click', resetFormConta);
-
     function resetFormConta() {
         formConta.reset();
         document.getElementById('contaId').value = '';
@@ -364,30 +447,116 @@ document.addEventListener("DOMContentLoaded", function() {
         btnCancelConta.classList.add('d-none');
     }
 
+    // --- CARTÕES (NOVO) ---
+    const tableCartao = document.getElementById('tabelaCartoes');
+    const formCartao = document.getElementById('formCartao');
+    const btnCancelCartao = document.getElementById('btnCancelCartao');
+
+    function loadCartoes() {
+        if(!tableCartao) return;
+        tableCartao.innerHTML = '<tr><td colspan="4" class="text-center p-3">Carregando...</td></tr>';
+        fetch('/api/cartoes/')
+            .then(r => r.json())
+            .then(data => {
+                tableCartao.innerHTML = '';
+                if(data.length === 0) {
+                     tableCartao.innerHTML = '<tr><td colspan="4" class="text-center p-3 text-muted">Nenhum cartão encontrado.</td></tr>';
+                     return;
+                }
+                data.forEach(cartao => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${cartao.nome} <br> <span class="badge bg-light text-secondary border">${cartao.bandeira}</span></td>
+                        <td>R$ ${parseFloat(cartao.limite).toFixed(2)}</td>
+                        <td><small>Fecha: ${cartao.dia_fechamento} <br> Vence: ${cartao.dia_vencimento}</small></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-link text-secondary btn-edit-cartao" 
+                                data-id="${cartao.id}" 
+                                data-nome="${cartao.nome}"
+                                data-limite="${cartao.limite}"
+                                data-fech="${cartao.dia_fechamento}"
+                                data-venc="${cartao.dia_vencimento}"
+                                data-band="${cartao.bandeira}"
+                                data-conta="${cartao.conta_pagamento || ''}"
+                            ><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-sm btn-link text-danger btn-del-cartao" data-id="${cartao.id}"><i class="bi bi-trash"></i></button>
+                        </td>
+                    `;
+                    tableCartao.appendChild(tr);
+                });
+                bindCartaoEvents();
+            });
+    }
+
+    function bindCartaoEvents() {
+        document.querySelectorAll('.btn-del-cartao').forEach(btn => {
+            btn.addEventListener('click', () => {
+                showDelete('Tem certeza que deseja excluir este cartão?', () => {
+                    fetch(`/api/cartoes/${btn.dataset.id}/`, { 
+                        method: 'DELETE', headers: getHeaders(), credentials: 'same-origin'
+                    }).then(r => loadCartoes());
+                });
+            });
+        });
+
+        document.querySelectorAll('.btn-edit-cartao').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.getElementById('cartaoId').value = btn.dataset.id;
+                document.getElementById('cartaoNome').value = btn.dataset.nome;
+                document.getElementById('cartaoLimite').value = btn.dataset.limite;
+                document.getElementById('cartaoFechamento').value = btn.dataset.fech;
+                document.getElementById('cartaoVencimento').value = btn.dataset.venc;
+                document.getElementById('cartaoBandeira').value = btn.dataset.band;
+                document.getElementById('cartaoConta').value = btn.dataset.conta;
+
+                document.getElementById('btnSaveCartao').textContent = "Atualizar";
+                btnCancelCartao.classList.remove('d-none');
+            });
+        });
+    }
+
+    formCartao.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('cartaoId').value;
+        const payload = {
+            nome: document.getElementById('cartaoNome').value,
+            limite: parseFloat(document.getElementById('cartaoLimite').value),
+            dia_fechamento: parseInt(document.getElementById('cartaoFechamento').value),
+            dia_vencimento: parseInt(document.getElementById('cartaoVencimento').value),
+            bandeira: document.getElementById('cartaoBandeira').value,
+            conta_pagamento: document.getElementById('cartaoConta').value || null // Handle empty
+        };
+        const method = id ? 'PUT' : 'POST';
+        const url = id ? `/api/cartoes/${id}/` : '/api/cartoes/';
+
+        fetch(url, {
+            method: method,
+            headers: getHeaders(),
+            body: JSON.stringify(payload),
+            credentials: 'same-origin'
+        }).then(r => {
+            if(r.ok) {
+                resetFormCartao();
+                loadCartoes();
+            } else {
+                r.json().then(d => alert('Erro: ' + JSON.stringify(d))).catch(() => alert('Erro crítico ao salvar.'));
+            }
+        });
+    });
+
+    btnCancelCartao.addEventListener('click', resetFormCartao);
+
+    function resetFormCartao() {
+        formCartao.reset();
+        document.getElementById('cartaoId').value = '';
+        document.getElementById('btnSaveCartao').textContent = "Salvar";
+        btnCancelCartao.classList.add('d-none');
+    }
+
     // Inicialização
     loadCategorias();
     loadContas();
-
-    // --- SOFT RELOAD LISTENERS ---
-    // Recarrega as tabelas se o Chatbot fizer alterações
-    document.addEventListener('categoryUpdated', () => {
-        loadCategorias();
-        // Feedback visual opcional
-        const badge = document.getElementById('cats-tab');
-        if(badge) {
-            badge.classList.add('text-success', 'fw-bold');
-            setTimeout(() => badge.classList.remove('text-success', 'fw-bold'), 2000);
-        }
-    });
-
-    document.addEventListener('accountUpdated', () => {
-        loadContas();
-        const badge = document.getElementById('contas-tab');
-        if(badge) {
-            badge.classList.add('text-success', 'fw-bold');
-            setTimeout(() => badge.classList.remove('text-success', 'fw-bold'), 2000);
-        }
-    });
+    loadCartoes();
 });
 </script>
 {% endblock %}
