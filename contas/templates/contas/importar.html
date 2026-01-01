@@ -16,7 +16,7 @@
             <h5 class="card-title mb-4">Envie seu Extrato (PDF)</h5>
             <p class="text-muted">A IA irá ler, categorizar e permitir que você revise antes de salvar.</p>
 
-            <form method="post" enctype="multipart/form-data" class="d-inline-block text-start"
+            <form id="formUpload" method="post" enctype="multipart/form-data" class="d-inline-block text-start"
                 style="max-width: 400px;">
                 {% csrf_token %}
                 <div class="mb-3">
@@ -30,13 +30,51 @@
             </form>
         </div>
     </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-90 flex-column justify-content-center align-items-center" style="z-index: 2000; backdrop-filter: blur(5px);">
+        <div class="spinner-border text-primary mb-4" style="width: 5rem; height: 5rem;" role="status"></div>
+        <h3 class="text-primary fw-bold animate-pulse">Processando Extrato...</h3>
+        <p class="text-muted fs-5">A Inteligência Artificial está lendo seu documento.</p>
+    </div>
+
+    <style>
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+        .animate-pulse {
+            animation: pulse 2s infinite;
+        }
+    </style>
+
+    <script>
+        const form = document.getElementById('formUpload');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                // Check validity (HTML5)
+                if (!this.checkValidity()) return;
+                
+                // Show overlay
+                const overlay = document.getElementById('loadingOverlay');
+                overlay.classList.remove('d-none');
+                overlay.classList.add('d-flex');
+                
+                // Button feedback
+                const btn = this.querySelector('button[type="submit"]');
+                btn.disabled = true;
+                btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div> Processando...';
+            });
+        }
+    </script>
+
     {% endif %}
 
 
     {% if preview %}
     <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="confirmar_dados" value="1">
 
         <div class="card shadow mb-4">
             <div class="card-header bg-success text-white">
@@ -56,7 +94,7 @@
                     </thead>
                     <tbody>
                         {% for item in transacoes_temp %}
-                        <tr>
+                        <tr {% if item.alerta_duplicidade %}class="table-warning border-warning"{% endif %}>
                             <td>
                                 <input type="date" name="data" class="form-control form-control-sm"
                                     value="{{ item.data }}">
@@ -65,6 +103,11 @@
                             <td>
                                 <input type="text" name="descricao" class="form-control form-control-sm"
                                     value="{{ item.descricao }}">
+                                {% if item.alerta_duplicidade %}
+                                    <div class="text-danger small fw-bold mt-1">
+                                        <i class="bi bi-exclamation-triangle-fill"></i> {{ item.motivo_alerta }}
+                                    </div>
+                                {% endif %}
                             </td>
 
                             <td>
@@ -111,7 +154,7 @@
                 <i class="bi bi-trash"></i> Cancelar Tudo
             </button>
 
-            <button type="submit" class="btn btn-success px-4">
+            <button type="submit" name="confirmar_dados" value="1" class="btn btn-success px-4">
                 <i class="bi bi-check-lg"></i> Confirmar e Salvar
             </button>
         </div>

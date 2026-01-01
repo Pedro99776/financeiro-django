@@ -116,6 +116,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     let currentDate = new Date();
+    currentDate.setDate(1); // Fix: Define dia 1 para evitar bugs de virada de mês (ex: 31 -> 30)
     let currentCartaoId = null;
     let currentFatura = null;
     
@@ -289,10 +290,10 @@ document.addEventListener('DOMContentLoaded', () => {
              if(r.ok) {
                  modalPagamento.hide();
                  loadFatura(); // Reload status
-                 alert('Fatura paga com sucesso!');
+                 if(window.showToast) window.showToast('Fatura paga com sucesso!', 'success');
              } else {
                  const err = await r.json();
-                 alert('Erro: ' + (err.error || 'Falha ao pagar'));
+                 if(window.showToast) window.showToast('Erro: ' + (err.error || 'Falha ao pagar'), 'error');
              }
          });
     });

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 from django.contrib.auth.models import User
 
 import hashlib
@@ -22,6 +23,12 @@ class Conta(models.Model):
 
     def __str__(self):
         return self.nome
+
+    @property
+    def saldo_atual(self):
+        receitas = self.transacao_set.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+        despesas = self.transacao_set.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+        return self.saldo_inicial + receitas - despesas
 
 
 
@@ -79,11 +86,20 @@ class Transacao(models.Model):
     # Campo para controle de duplicidade
     hash_id = models.CharField(max_length=32, blank=True, null=True, unique=True)
 
+    @staticmethod
+    def gerar_hash(data, valor, descricao):
+        """Gera um hash único baseado nos dados da transação."""
+        # Garante string 'None' se for None, para manter compatibilidade com registros antigos
+        # porem idealmente description nao deveria ser None.
+        # Check logic: f"{self.descricao}" uses str(self.descricao). 
+        # If None -> 'None'.
+        
+        string_unica = f"{data}{valor}{descricao}"
+        return hashlib.md5(string_unica.encode('utf-8')).hexdigest()
+
     def save(self, *args, **kwargs):
         # Gera o hash automaticamente antes de salvar se não existir
         if not self.hash_id:
-            # Cria uma string única: DATA + VALOR + DESCRIÇÃO
-            string_unica = f"{self.data}{self.valor}{self.descricao}"
-            self.hash_id = hashlib.md5(string_unica.encode('utf-8')).hexdigest()
+            self.hash_id = Transacao.gerar_hash(self.data, self.valor, self.descricao)
 
         super().save(*args, **kwargs)

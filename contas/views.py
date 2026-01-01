@@ -4,6 +4,7 @@ from django.contrib import messages
 from django.db.models import Sum
 from django.db import IntegrityError
 from datetime import date, datetime
+from decimal import Decimal
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
 from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm, CartaoCreditoForm
@@ -377,10 +378,43 @@ def importar_extrato(request):
 
                     # Serializa dados para a sessão
                     dados_serializaveis = []
+                    seen_hashes = set() # Controle de duplicidade no próprio arquivo
+
                     for item in dados_brutos:
                         item_copy = item.copy()
                         if isinstance(item_copy.get('data'), (date, datetime)):
                             item_copy['data'] = item_copy['data'].strftime('%Y-%m-%d')
+                        
+                        # Detecção de Potencial Duplicidade (Pagamento de Fatura)
+                        desc_upper = (item_copy.get('descricao') or "").upper()
+                        # Keywords comuns de pagamento de cartão/fatura
+                        keywords = ["FATURA", "CARTAO", "INT ITAU MC", "PAGAMENTO TITULO", "PAGAR FAT", "CREDIT CARD"]
+                        if any(k in desc_upper for k in keywords):
+                             item_copy['alerta_duplicidade'] = True
+                             item_copy['motivo_alerta'] = "Possível pagamento de fatura (Duplicidade)"
+
+                        # Detecção de Duplicidade Exata (Hash)
+                        try:
+                            # Converte para Decimal para garantir hash idêntico ao Model
+                            val_dec = Decimal(str(item_copy.get('valor', 0)))
+                            h_check = Transacao.gerar_hash(item_copy['data'], val_dec, item_copy.get('descricao'))
+                            
+                            is_dup = False
+                            if Transacao.objects.filter(hash_id=h_check).exists():
+                                is_dup = True
+                                item_copy['motivo_alerta'] = "Transação já importada (Idêntica)"
+                            elif h_check in seen_hashes:
+                                is_dup = True
+                                item_copy['motivo_alerta'] = "Duplicada neste arquivo"
+                                
+                            if is_dup:
+                                item_copy['alerta_duplicidade'] = True
+                                
+                            seen_hashes.add(h_check)
+                            
+                        except Exception as e:
+                            pass
+
                         dados_serializaveis.append(item_copy)
 
                     request.session['transacoes_temp'] = dados_serializaveis
@@ -400,7 +434,7 @@ def importar_extrato(request):
                     return redirect('importar_extrato')
 
         # --- CENÁRIO 2: USUÁRIO CLICOU EM "CONFIRMAR IMPORTAÇÃO" ---
-        elif 'confirmar_dados' in request.POST:
+        elif 'confirmar_dados' in request.POST and 'cancelar' not in request.POST:
             conta_id = request.session.get('conta_temp_id')
 
             # ✅ SEGURANÇA: Valida que a conta pertence ao usuário
@@ -413,6 +447,7 @@ def importar_extrato(request):
             lista_categorias = request.POST.getlist('categoria')
 
             count = 0
+            skipped = 0
             try:
                 for i in range(len(lista_datas)):
                     cat_id = lista_categorias[i]
@@ -426,15 +461,19 @@ def importar_extrato(request):
                             usuario=request.user
                         )
 
-                    Transacao.objects.create(
-                        data=lista_datas[i],
-                        descricao=lista_descricoes[i],
-                        valor=lista_valores[i],
-                        tipo=lista_tipos[i],
-                        conta=conta,
-                        categoria=categoria
-                    )
-                    count += 1
+                    try:
+                        Transacao.objects.create(
+                            data=lista_datas[i],
+                            descricao=lista_descricoes[i],
+                            valor=lista_valores[i],
+                            tipo=lista_tipos[i],
+                            conta=conta,
+                            categoria=categoria
+                        )
+                        count += 1
+                    except IntegrityError:
+                        skipped += 1
+                        continue
 
                 # Limpa a sessão
                 if 'transacoes_temp' in request.session:
@@ -442,7 +481,10 @@ def importar_extrato(request):
                 if 'conta_temp_id' in request.session:
                     del request.session['conta_temp_id']
 
-                messages.success(request, f"{count} transações importadas com sucesso!")
+                msg_sucesso = f"{count} transações importadas com sucesso!"
+                if skipped > 0:
+                    msg_sucesso += f" ({skipped} duplicadas ignoradas)"
+                messages.success(request, msg_sucesso)
                 return redirect('listagem')
 
             except Exception as e:
