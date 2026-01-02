@@ -39,6 +39,24 @@ class CategoriaViewSet(BaseUserViewSet):
     def get_queryset(self):
         return Categoria.objects.filter(usuario=self.request.user).order_by('nome')
 
+    def perform_destroy(self, instance):
+        """
+        Ao excluir uma categoria, move as transações para 'Sem Categoria' (ou cria uma)
+        para evitar que fiquem com NULL e sumam dos relatórios/extrato.
+        """
+        user = self.request.user
+        # Verifica se tem transações
+        if instance.transacao_set.exists():
+            # Busca ou cria categoria de fallback
+            fallback, _ = Categoria.objects.get_or_create(nome="Sem Categoria", usuario=user)
+            
+            # Se a categoria a ser excluída for a própria fallback, não tem o que fazer (vai ficar null msm)
+            if instance.id != fallback.id:
+                instance.transacao_set.update(categoria=fallback)
+        
+        instance.delete()
+        limpar_cache_contexto(user)
+
 
 class ContaViewSet(BaseUserViewSet):
     serializer_class = ContaSerializer
@@ -94,14 +112,18 @@ class FaturaViewSet(BaseUserViewSet):
              # Opcional: Permitir saldo negativo? Sim.
              pass
              
+        # Garante categoria 'Pagamento de Fatura'
+        cat_pgto, _ = Categoria.objects.get_or_create(nome="Pagamento Fatura", usuario=request.user)
+
         # Criar Transação de Pagamento
         Transacao.objects.create(
             conta=conta,
+            categoria=cat_pgto,
             descricao=f"Pagamento Fatura {fatura.cartao.nome}",
             valor=fatura.valor_total,
             tipo='D',
             data=datetime.now().date(),
-            categoria=Categoria.objects.filter(usuario=request.user, nome="Pagamento de Cartão").first() # Ideal: Categoria 'Pagamento'
+
         )
         
         fatura.paga = True

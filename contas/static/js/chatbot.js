@@ -6,19 +6,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const sendBtn = document.getElementById('send-btn');
     const messagesContainer = document.getElementById('chat-messages');
 
-    // Estado local para contas
+    // Estado local para contas e cartões
     let userContas = [];
+    let userCartoes = [];
+    let dataLoaded = false;
 
-    // Carrega contas ao iniciar
-    fetch('/api/contas/')
-        .then(r => r.json())
-        .then(data => {
-            userContas = data;
-        })
-        .catch(err => console.error("Erro ao carregar contas para o chat", err));
+    // Carrega dados financeiros APENAS quando abrir o chat para evitar requests duplicados na home
+    function loadFinancialData() {
+        if (dataLoaded) return;
+        
+        Promise.all([
+            fetch('/api/contas/').then(r => r.json()),
+            fetch('/api/cartoes/').then(r => r.json())
+        ]).then(([contas, cartoes]) => {
+            userContas = contas;
+            userCartoes = cartoes;
+            dataLoaded = true;
+            console.log("Chatbot: Dados financeiros carregados.");
+        }).catch(err => console.error("Erro ao carregar dados financeiros", err));
+    }
 
     // Toggle Chat Window
     chatFab.addEventListener('click', () => {
+        loadFinancialData(); // Lazy load
         chatWindow.classList.toggle('open');
         if (chatWindow.classList.contains('open')) {
             setTimeout(() => chatInput.focus(), 300);
@@ -214,9 +224,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     <input type="date" class="form-control form-control-sm" id="act-data" value="${data.data || new Date().toISOString().split('T')[0]}">
                 </div>
                 <div class="col-6">
-                    <label class="small text-muted">Conta</label>
-                    <select class="form-select form-select-sm" id="act-conta">
-                        ${gerarOpcoesContas(data.conta)}
+                    <label class="small text-muted">Pago em (Conta/Cartão)</label>
+                    <select class="form-select form-select-sm" id="act-pagamento">
+                        ${gerarOpcoesPagamento(data.conta, data.cartao)}
                     </select>
                 </div>
             </div>
@@ -325,13 +335,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- EXECUÇÃO: TRANSAÇÃO ---
     function executarAcaoTransacao(cardElement) {
+        const pagamentoSel = cardElement.querySelector('#act-pagamento').value;
+        const [tipoPgto, nomePgto] = pagamentoSel.split(':'); // Ex: 'CONTA:Nubank' ou 'CARTAO:Visa'
+
         const payload = {
             descricao: cardElement.querySelector('#act-desc').value,
             valor: cardElement.querySelector('#act-valor').value,
             tipo: cardElement.querySelector('#act-tipo').value,
             categoria_nome: cardElement.querySelector('#act-cat').value,
             data: cardElement.querySelector('#act-data').value,
-            conta_nome: cardElement.querySelector('#act-conta').options[cardElement.querySelector('#act-conta').selectedIndex].text
+            conta_nome: (tipoPgto === 'CONTA') ? nomePgto : '',
+            cartao_nome: (tipoPgto === 'CARTAO') ? nomePgto : ''
         };
         enviarRequest('/api/transacoes/', 'POST', payload, cardElement, "Transação criada!", 'transactionCreated');
     }
@@ -424,24 +438,69 @@ document.addEventListener('DOMContentLoaded', function() {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     }
 
-    function gerarOpcoesContas(contaSugerida) {
-        if (!userContas || userContas.length === 0) {
-            return '<option value="" selected>Padrão</option>';
+    function gerarOpcoesPagamento(contaSugerida, cartaoSugerido) {
+        let html = '';
+        
+        // 1. Determina quem deve ser selecionado por padrão
+        let selectedValue = '';
+        let foundMatch = false;
+
+        // Busca match em Contas
+        if (contaSugerida && userContas.length > 0) {
+            const match = userContas.find(c => c.nome.toLowerCase().includes(contaSugerida.toLowerCase()));
+            if (match) {
+                selectedValue = `CONTA:${match.nome}`;
+                foundMatch = true;
+            }
+        }
+
+        // Busca match em Cartões (se não achou em contas ou se cartaoSugerido é prioritário?)
+        // Se cartaoSugerido existe, ele veio da IA, então tem prioridade
+        if (cartaoSugerido && userCartoes.length > 0) {
+            const match = userCartoes.find(c => c.nome.toLowerCase().includes(cartaoSugerido.toLowerCase()));
+            if (match) {
+                selectedValue = `CARTAO:${match.nome}`;
+                foundMatch = true;
+            }
+        }
+
+        // Regras de Fallback (Default)
+        if (!foundMatch) {
+            if (cartaoSugerido && userCartoes.length > 0) {
+                // IA sugeriu cartão (ex: "crédito") mas não achou nome -> Default: 1º Cartão
+                selectedValue = `CARTAO:${userCartoes[0].nome}`;
+            } else if (userContas.length > 0) {
+                // Caso contrário (sem sugestão ou sugestão de conta falha) -> Default: 1ª Conta
+                selectedValue = `CONTA:${userContas[0].nome}`;
+            }
+        }
+
+        // 2. Gera HTML
+        // --- CONTAS ---
+        if (userContas.length > 0) {
+            html += '<optgroup label="Contas">';
+            userContas.forEach(conta => {
+                const val = `CONTA:${conta.nome}`;
+                const isSel = (val === selectedValue);
+                html += `<option value="${val}" ${isSel ? 'selected' : ''}>${conta.nome}</option>`;
+            });
+            html += '</optgroup>';
+        }
+
+        // --- CARTÕES ---
+        if (userCartoes.length > 0) {
+            html += '<optgroup label="Cartões de Crédito">';
+            userCartoes.forEach(cartao => {
+                const val = `CARTAO:${cartao.nome}`;
+                const isSel = (val === selectedValue);
+                html += `<option value="${val}" ${isSel ? 'selected' : ''}>${cartao.nome}</option>`;
+            });
+            html += '</optgroup>';
         }
         
-        let html = '';
-        let selecionado = false;
-        
-        // Tenta encontrar match com a sugestão da IA
-        userContas.forEach(conta => {
-            const isMatch = contaSugerida && conta.nome.toLowerCase().includes(contaSugerida.toLowerCase());
-            if (isMatch) selecionado = true;
-            html += `<option value="${conta.id}" ${isMatch ? 'selected' : ''}>${conta.nome}</option>`;
-        });
-
-        // Se nada foi selecionado pela IA, seleciona a primeira conta (regra de negócio)
-        if (!selecionado && !contaSugerida) {
-             // O browser já seleciona o primeiro option por padrão, mas podemos forçar se quiser
+        // Se não tiver nada, adiciona opção vazia
+        if (html === '') {
+             html = '<option value="">Nenhuma conta/cartão</option>';
         }
         
         return html;

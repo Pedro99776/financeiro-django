@@ -315,7 +315,7 @@ document.addEventListener("DOMContentLoaded", function() {
                     </td>
                     <td class="text-center">
                         <a href="/update/${t.id}/" class="btn btn-sm btn-link text-secondary"><i class="bi bi-pencil"></i></a>
-                        <a href="/delete/${t.id}/" class="btn btn-sm btn-link text-danger"><i class="bi bi-trash"></i></a>
+                        <button onclick="confirmarExclusao(${t.id}, '${t.descricao || 'Transação'}' )" class="btn btn-sm btn-link text-danger border-0 bg-transparent"><i class="bi bi-trash"></i></button>
                     </td>
                 </tr>`;
             tbody.innerHTML += row;
@@ -596,11 +596,49 @@ document.addEventListener("DOMContentLoaded", function() {
         buscarDados();
     });
 
+    // --- 9. MODAL DE EXCLUSÃO ---
+    let deleteId = null;
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
+
+    window.confirmarExclusao = function(id, descricao) {
+        deleteId = id;
+        document.getElementById('deleteDescricao').textContent = descricao;
+        deleteModal.show();
+    };
+
+    document.getElementById('btnConfirmarDelete').addEventListener('click', function() {
+        if (deleteId) {
+            window.location.href = `/delete/${deleteId}/`;
+        }
+    });
+
     // --- 8. INICIALIZAÇÃO ---
     carregarFiltros().then(() => {
         buscarDados();
     });
 });
 </script>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0 shadow">
+      <div class="modal-body p-4 text-center">
+        <div class="mb-3 text-danger">
+            <i class="bi bi-exclamation-circle" style="font-size: 3rem;"></i>
+        </div>
+        <h5 class="mb-3 fw-bold">Tem certeza?</h5>
+        <p class="text-muted mb-4">
+            Você está prestes a excluir a transação: <br>
+            <strong id="deleteDescricao" class="text-dark"></strong>
+        </p>
+        <div class="d-flex justify-content-center gap-2">
+            <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" id="btnConfirmarDelete" class="btn btn-danger px-4">Sim, Excluir</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% endblock %}

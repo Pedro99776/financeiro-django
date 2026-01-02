@@ -11,6 +11,7 @@
     </div>
 
     {% if not preview %}
+    <!-- Formulário de upload -->
     <div class="card shadow">
         <div class="card-body p-5 text-center">
             <h5 class="card-title mb-4">Envie seu Extrato (PDF, Imagem ou CSV)</h5>
@@ -37,42 +38,10 @@
         <h3 class="text-primary fw-bold animate-pulse">Processando Extrato...</h3>
         <p class="text-muted fs-5">A Inteligência Artificial está lendo seu documento.</p>
     </div>
-
-    <style>
-        @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
-        }
-        .animate-pulse {
-            animation: pulse 2s infinite;
-        }
-    </style>
-
-    <script>
-        const form = document.getElementById('formUpload');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                // Check validity (HTML5)
-                if (!this.checkValidity()) return;
-                
-                // Show overlay
-                const overlay = document.getElementById('loadingOverlay');
-                overlay.classList.remove('d-none');
-                overlay.classList.add('d-flex');
-                
-                // Button feedback
-                const btn = this.querySelector('button[type="submit"]');
-                btn.disabled = true;
-                btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div> Processando...';
-            });
-        }
-    </script>
-
     {% endif %}
 
-
     {% if preview %}
+    <!-- Tabela de preview -->
     <form method="post">
         {% csrf_token %}
 
@@ -84,12 +53,14 @@
                 <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 150px;">Data</th>
+                            <th style="width: 140px;">Data</th>
                             <th>Descrição</th>
-                            <th style="width: 130px;">Valor (R$)</th>
-                            <th style="width: 100px;">Tipo</th>
-                            <th style="width: 200px;">Categoria Sugerida</th>
-                            <th style="width: 50px;"></th>
+                            <th style="width: 110px;">Valor (R$)</th>
+                            <th style="width: 120px;">Tipo</th>
+                            <th style="width: 180px;">Categoria</th>
+                            <th style="width: 80px;" class="text-center">Crédito?</th>
+                            <th style="width: 150px;">Cartão</th>
+                            <th style="width: 40px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -137,6 +108,29 @@
                             </td>
 
                             <td class="text-center">
+                                <div class="form-check d-flex justify-content-center">
+                                    <input class="form-check-input check-credito" type="checkbox"
+                                        {% if item.cartao_id %}checked{% endif %}
+                                        onchange="toggleCartao(this)">
+                                </div>
+                            </td>
+
+                            <td>
+                                <input type="hidden" name="cartao" class="hidden-cartao" value="{{ item.cartao_id|default:'' }}">
+                                
+                                <select class="form-select form-select-sm select-cartao"
+                                        {% if not item.cartao_id %}readonly{% endif %}
+                                        onchange="updateHiddenCartao(this)">
+                                    <option value="">Nenhum</option>
+                                    {% for cartao in cartoes %}
+                                    <option value="{{ cartao.id }}" {% if cartao.id == item.cartao_id %}selected{% endif %}>
+                                        {{ cartao.nome }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+
+                            <td class="text-center">
                                 <button type="button" class="btn btn-sm text-danger"
                                     onclick="this.closest('tr').remove()">
                                     <i class="bi bi-x-lg"></i>
@@ -162,4 +156,108 @@
     {% endif %}
 
 </div>
+
+<!-- ⚠️ SCRIPT MOVIDO PARA FORA DOS BLOCOS CONDICIONAIS -->
+<style>
+    @keyframes pulse {
+        0% { opacity: 0.6; }
+        50% { opacity: 1; }
+        100% { opacity: 0.6; }
+    }
+    .animate-pulse {
+        animation: pulse 2s infinite;
+    }
+    
+    /* Select desabilitado */
+    .select-cartao[readonly] {
+        opacity: 0.6;
+        background-color: #e9ecef !important;
+        color: #6c757d !important;
+        pointer-events: none !important;
+        cursor: not-allowed !important;
+    }
+    
+    .select-cartao option {
+        color: #000;
+    }
+</style>
+
+<script>
+    // Script do formulário de upload
+    const form = document.getElementById('formUpload');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!this.checkValidity()) return;
+            
+            const overlay = document.getElementById('loadingOverlay');
+            if (overlay) {
+                overlay.classList.remove('d-none');
+                overlay.classList.add('d-flex');
+            }
+            
+            const btn = this.querySelector('button[type="submit"]');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div> Processando...';
+        });
+    }
+
+    // Função para habilitar/desabilitar o select de cartão
+    function toggleCartao(checkbox) {
+        const row = checkbox.closest('tr');
+        const select = row.querySelector('.select-cartao');
+        const hiddenInput = row.querySelector('.hidden-cartao');
+        
+        console.log('toggleCartao chamado:', {
+            checked: checkbox.checked,
+            selectElement: select
+        });
+        
+        if (checkbox.checked) {
+            // Habilita o select
+            select.removeAttribute('readonly');
+            
+            // Sincroniza o valor
+            if (select.value) {
+                hiddenInput.value = select.value;
+            }
+            
+            console.log('✅ Select HABILITADO');
+        } else {
+            // Desabilita o select
+            select.setAttribute('readonly', 'readonly');
+            select.value = "";
+            hiddenInput.value = "";
+            
+            console.log('❌ Select DESABILITADO');
+        }
+    }
+
+    // Atualiza o hidden input quando o select muda
+    function updateHiddenCartao(select) {
+        const row = select.closest('tr');
+        const hiddenInput = row.querySelector('.hidden-cartao');
+        hiddenInput.value = select.value;
+        
+        console.log('🔄 Cartão atualizado:', {
+            selectValue: select.value,
+            hiddenValue: hiddenInput.value
+        });
+    }
+
+    // Inicializa ao carregar a página
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('🔄 Inicializando controles de cartão...');
+        
+        const checkboxes = document.querySelectorAll('.check-credito');
+        console.log(`📊 Total de checkboxes: ${checkboxes.length}`);
+        
+        checkboxes.forEach(function(checkbox, index) {
+            console.log(`Checkbox ${index}: ${checkbox.checked ? '✅ checked' : '❌ unchecked'}`);
+            toggleCartao(checkbox);
+        });
+        
+        console.log('✅ Inicialização completa!');
+    });
+</script>
+
 {% endblock %}

@@ -138,7 +138,8 @@ VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
                 "valor": types.Schema(type="NUMBER", description="Valor numérico da transação (ex: 50.00). Use positivo."),
                 "tipo": types.Schema(type="STRING", enum=["D", "R"], description="Tipo: 'D' para Despesa, 'R' para Receita"),
                 "categoria": types.Schema(type="STRING", description="Nome da categoria (ex: Transporte, Alimentação). OBRIGATÓRIO: Se não foi falado, INFERIR pelo contexto (ex: Uber -> Transporte)."),
-                "conta": types.Schema(type="STRING", description="Nome da conta (ex: Nubank, Carteira). Se não informado ou desconhecido, envie STRING VAZIA '' (para usar a conta padrão)."),
+                "conta": types.Schema(type="STRING", description="Nome da conta (ex: Nubank, Carteira). Se for cartão de crédito, deixe vazio."),
+                "cartao": types.Schema(type="STRING", description="Nome do cartão de crédito (ex: Nubank, Visa). Use se o usuário mencionar 'crédito' ou nome do cartão."),
                 "data": types.Schema(type="STRING", description="Data no formato YYYY-MM-DD. OBRIGATÓRIO: Se o usuário disse 'ontem', 'hoje', 'terça passada', CALCULE baseando-se na data de referência fornecida.")
             },
             required=["descricao", "valor", "tipo", "data", "categoria"]
@@ -284,7 +285,8 @@ VOCÊ ESTÁ PROIBIDO DE EXECUTAR AÇÕES APENAS COM TEXTO.
                         return { "type": "action_proposal", "action": "create_transaction", "data": {
                                 "descricao": args.get('descricao'), "valor": float(args.get('valor', 0)),
                                 "tipo": args.get('tipo'), "categoria": args.get('categoria', 'Importados'),
-                                "conta": args.get('conta', ''), "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
+                                "conta": args.get('conta', ''), "cartao": args.get('cartao', ''), 
+                                "data": args.get('data', datetime.now().strftime('%Y-%m-%d'))
                             }, "text_fallback": f"Entendi. Vou preparar o lançamento de {args.get('descricao')} no valor de R$ {args.get('valor')}."
                         }
                     elif fc.name == "criar_categoria":

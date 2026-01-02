@@ -66,7 +66,7 @@ class CartaoCreditoSerializer(serializers.ModelSerializer):
 
 class TransacaoSerializer(serializers.ModelSerializer):
     """Serializer para Transações (Leitura/Escrita Padrão)"""
-    categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
+    categoria_nome = serializers.CharField(source='categoria.nome', read_only=True, allow_null=True)
     conta_nome = serializers.CharField(source='conta.nome', read_only=True, allow_null=True)
     cartao_nome = serializers.CharField(source='cartao.nome', read_only=True, allow_null=True)
 
@@ -88,7 +88,11 @@ class TransacaoCreateSerializer(serializers.Serializer):
     valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
     tipo = serializers.ChoiceField(choices=[('D', 'Despesa'), ('R', 'Receita')])
     categoria_nome = serializers.CharField(max_length=100, required=False)
+    tipo = serializers.ChoiceField(choices=[('D', 'Despesa'), ('R', 'Receita')])
+    categoria_nome = serializers.CharField(max_length=100, required=False)
     conta_nome = serializers.CharField(max_length=100, required=False)
+    cartao_nome = serializers.CharField(max_length=100, required=False) # Novo
+    data = serializers.DateField(required=False)
     data = serializers.DateField(required=False)
 
     def validate(self, data):
@@ -120,30 +124,42 @@ class TransacaoCreateSerializer(serializers.Serializer):
                 usuario=usuario
             )
 
-        # Buscar conta
+        # Buscar cartão (Novo)
+        cartao_nome = validated_data.pop('cartao_nome', None)
+        cartao = None
+        if cartao_nome:
+            cartao = CartaoCredito.objects.filter(usuario=usuario, nome__iexact=cartao_nome).first()
+            if cartao:
+                conta = None # Prioridade para cartão
+
+        # Buscar conta (apenas se não tiver cartão)
         conta_nome = validated_data.pop('conta_nome', None)
-        if conta_nome:
-            try:
-                conta = Conta.objects.get(
-                    nome__iexact=conta_nome,
-                    usuario=usuario
-                )
-            except Conta.DoesNotExist:
-                raise serializers.ValidationError({
-                    'conta_nome': f'Conta "{conta_nome}" não encontrada'
-                })
+        if not cartao:
+            if conta_nome:
+                try:
+                    conta = Conta.objects.get(
+                        nome__iexact=conta_nome,
+                        usuario=usuario
+                    )
+                except Conta.DoesNotExist:
+                    raise serializers.ValidationError({
+                        'conta_nome': f'Conta "{conta_nome}" não encontrada'
+                    })
+            else:
+                # Usa primeira conta do usuário se não especificado
+                conta = Conta.objects.filter(usuario=usuario).first()
+                if not conta:
+                    raise serializers.ValidationError({
+                        'conta_nome': 'Você precisa criar uma conta primeiro'
+                    })
         else:
-            # Usa primeira conta do usuário se não especificado
-            conta = Conta.objects.filter(usuario=usuario).first()
-            if not conta:
-                raise serializers.ValidationError({
-                    'conta_nome': 'Você precisa criar uma conta primeiro'
-                })
+            conta = None # Garante Null se for Cartão
 
         # Criar transação
         transacao = Transacao.objects.create(
             categoria=categoria,
             conta=conta,
+            cartao=cartao, # Novo
             **validated_data
         )
 

@@ -1,8 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from django.db.models import Sum
-from django.db import IntegrityError
+from django.db.models import Sum, Q
+from django.db import IntegrityError, transaction
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -291,8 +291,19 @@ def nova_transacao(request):
 
 @login_required
 def update_transacao(request, pk):
-    # ✅ SEGURANÇA: Garante que só pode editar transações próprias
-    transacao = get_object_or_404(Transacao, pk=pk, conta__usuario=request.user)
+    # ✅ SEGURANÇA ROBUSTA: Busca a transação e verifica permissão manualmente
+    # Isso evita problemas com queries complexas (Q objects) em transações órfãs de conta
+    transacao = get_object_or_404(Transacao, pk=pk)
+    
+    # Verifica se pertence ao usuário (seja via Conta ou Cartão)
+    dono = False
+    if transacao.conta and transacao.conta.usuario == request.user:
+        dono = True
+    elif transacao.cartao and transacao.cartao.usuario == request.user:
+        dono = True
+        
+    if not dono:
+        raise Http404("Você não tem permissão para editar esta transação.")
 
     if request.method == 'POST':
         form = TransacaoForm(request.POST, instance=transacao, user=request.user)
@@ -308,8 +319,19 @@ def update_transacao(request, pk):
 
 @login_required
 def delete_transacao(request, pk):
-    # ✅ SEGURANÇA: Garante que só pode deletar transações próprias
-    transacao = get_object_or_404(Transacao, pk=pk, conta__usuario=request.user)
+    # ✅ SEGURANÇA ROBUSTA: Busca a transação e verifica permissão manualmente
+    transacao = get_object_or_404(Transacao, pk=pk)
+    
+    # Verifica se pertence ao usuário
+    dono = False
+    if transacao.conta and transacao.conta.usuario == request.user:
+        dono = True
+    elif transacao.cartao and transacao.cartao.usuario == request.user:
+        dono = True
+        
+    if not dono:
+        raise Http404("Você não tem permissão para excluir esta transação.")
+        
     transacao.delete()
     messages.success(request, "Transação excluída com sucesso!")
     return redirect('listagem')
@@ -426,7 +448,8 @@ def importar_extrato(request):
                         'form': form,
                         'preview': True,
                         'transacoes_temp': dados_serializaveis,
-                        'categorias': categorias
+                        'categorias': categorias,
+                        'cartoes': CartaoCredito.objects.filter(usuario=request.user)
                     })
 
                 except Exception as e:
@@ -436,61 +459,97 @@ def importar_extrato(request):
         # --- CENÁRIO 2: USUÁRIO CLICOU EM "CONFIRMAR IMPORTAÇÃO" ---
         elif 'confirmar_dados' in request.POST and 'cancelar' not in request.POST:
             conta_id = request.session.get('conta_temp_id')
+            # Busca cartões para uso no loop (fallback se usuário selecionou cartão na tabela)
+            
+            # ✅ SEGURANÇA: Valida que a conta pertence ao usuário (se houver conta)
+            conta = None
+            if conta_id:
+                conta = get_object_or_404(Conta, pk=conta_id, usuario=request.user)
 
-            # ✅ SEGURANÇA: Valida que a conta pertence ao usuário
-            conta = get_object_or_404(Conta, id=conta_id, usuario=request.user)
-
+            # Recupera dados editados pelo usuário
             lista_datas = request.POST.getlist('data')
             lista_descricoes = request.POST.getlist('descricao')
             lista_valores = request.POST.getlist('valor')
             lista_tipos = request.POST.getlist('tipo')
             lista_categorias = request.POST.getlist('categoria')
+            lista_cartoes = request.POST.getlist('cartao') # Novo campo
 
             count = 0
             skipped = 0
+            
             try:
-                for i in range(len(lista_datas)):
-                    cat_id = lista_categorias[i]
+                with transaction.atomic():
+                    for i in range(len(lista_datas)):
+                        # Verifica categoria
+                        cat_id = lista_categorias[i]
+                        categoria = None
+                        
+                        if cat_id:
+                            try:
+                                categoria = Categoria.objects.get(id=cat_id, usuario=request.user)
+                            except (Categoria.DoesNotExist, ValueError):
+                                pass
+                        
+                        if not categoria:
+                             categoria, _ = Categoria.objects.get_or_create(
+                                nome="Importados", usuario=request.user
+                            )
+                        
+                        # Verifica Cartão (Prioridade sobre Conta)
+                        cartao_id = lista_cartoes[i] if len(lista_cartoes) > i else None
+                        cartao_obj = None
+                        conta_final = conta
+                        
+                        if cartao_id:
+                             # Se tem cartão selecionado, ignora a conta principal
+                             try:
+                                 cartao_obj = CartaoCredito.objects.get(pk=cartao_id, usuario=request.user)
+                                 conta_final = None # Transação de cartão não move saldo de conta imediatamente
+                             except CartaoCredito.DoesNotExist:
+                                 pass
+                        
+                        if not conta_final and not cartao_obj:
+                             # Se não tem nem conta nem cartão (ex: erro no form), ignora ou usa default?
+                             # Idealmente deve ter conta_id da sessão.
+                             pass
 
-                    if cat_id:
-                        # ✅ SEGURANÇA: Valida que a categoria pertence ao usuário
-                        categoria = get_object_or_404(Categoria, id=cat_id, usuario=request.user)
-                    else:
-                        categoria, _ = Categoria.objects.get_or_create(
-                            nome="Importados",
-                            usuario=request.user
-                        )
+                        # Cria a transação (com tratamento de duplicidade)
+                        try:
+                            # Converte valor para Decimal para consistência do hash
+                            val_dec = Decimal(lista_valores[i])
+                            
+                            # Converte data string para objeto date
+                            # O formato vindo do input type="date" é YYYY-MM-DD
+                            data_str = lista_datas[i]
+                            data_obj = datetime.strptime(data_str, '%Y-%m-%d').date()
+                            
+                            # ✅ FIX: Usa savepoint para evitar que erro de duplicidade quebre o loop
+                            with transaction.atomic():
+                                t = Transacao(
+                                    data=data_obj,
+                                    descricao=lista_descricoes[i],
+                                    valor=val_dec,
+                                    tipo=lista_tipos[i],
+                                    conta=conta_final,
+                                    cartao=cartao_obj, # Novo
+                                    categoria=categoria
+                                )
+                                t.save()
+                            count += 1
+                        except IntegrityError:
+                            skipped += 1
+                            continue
 
-                    try:
-                        Transacao.objects.create(
-                            data=lista_datas[i],
-                            descricao=lista_descricoes[i],
-                            valor=lista_valores[i],
-                            tipo=lista_tipos[i],
-                            conta=conta,
-                            categoria=categoria
-                        )
-                        count += 1
-                    except IntegrityError:
-                        skipped += 1
-                        continue
-
-                # Limpa a sessão
-                if 'transacoes_temp' in request.session:
-                    del request.session['transacoes_temp']
-                if 'conta_temp_id' in request.session:
-                    del request.session['conta_temp_id']
-
-                msg_sucesso = f"{count} transações importadas com sucesso!"
-                if skipped > 0:
-                    msg_sucesso += f" ({skipped} duplicadas ignoradas)"
-                messages.success(request, msg_sucesso)
-                return redirect('listagem')
-
+                messages.success(request, f"{count} transações importadas com sucesso! ({skipped} duplicadas ignoradas)")
             except Exception as e:
-                messages.error(request, f"Erro ao salvar: {e}")
-                return redirect('importar_extrato')
+                messages.error(request, f"Erro ao salvar: {str(e)}")
 
+            # Limpa sessão
+            if 'transacoes_temp' in request.session: del request.session['transacoes_temp']
+            if 'conta_temp_id' in request.session: del request.session['conta_temp_id']
+
+            return redirect('listagem')
+        
         # --- CENÁRIO 3: CANCELAR ---
         elif 'cancelar' in request.POST:
             if 'transacoes_temp' in request.session:
@@ -499,12 +558,26 @@ def importar_extrato(request):
                 del request.session['conta_temp_id']
             messages.info(request, "Importação cancelada.")
             return redirect('importar_extrato')
+            
+    # --- GET: Renderiza o Preview ou o Upload ---
+    transacoes_temp = request.session.get('transacoes_temp')
+    conta_temp_id = request.session.get('conta_temp_id')
+    
+    context = {
+        'form': UploadFileForm(user=request.user),
+        'preview': bool(transacoes_temp),
+        'transacoes_temp': transacoes_temp or [],
+        'cartoes': CartaoCredito.objects.filter(usuario=request.user),
+        'categorias': Categoria.objects.filter(usuario=request.user).order_by('nome')
+    }
+    
+    if conta_temp_id:
+        try:
+            context['conta_selecionada'] = Conta.objects.get(pk=conta_temp_id)
+        except: pass
 
-    else:
-        # ✅ CORREÇÃO: Passa o usuário para o form
-        form = UploadFileForm(user=request.user)
+    return render(request, 'contas/importar.html', context)
 
-    return render(request, 'contas/importar.html', {'form': form, 'categorias': categorias})
 
 
 @login_required
