@@ -157,7 +157,9 @@ document.addEventListener('DOMContentLoaded', function() {
         // Dispatcher baseado no tipo de ação
         switch(actionData.action) {
             case 'create_transaction':
-                renderTransactionCard(actionData.data, div);
+            case 'edit_transaction':
+            case 'delete_transaction':
+                renderTransactionCard(actionData, div);
                 break;
             case 'create_category':
             case 'edit_category':
@@ -168,6 +170,11 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'edit_account':
             case 'delete_account':
                 renderAccountCard(actionData, div);
+                break;
+            case 'create_card':
+            case 'edit_card':
+            case 'delete_card':
+                renderCardCard(actionData, div);
                 break;
             default:
                 div.innerHTML += `<div class="text-danger">Ação desconhecida: ${actionData.action}</div>`;
@@ -192,53 +199,103 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // --- CARD: TRANSAÇÃO ---
-    function renderTransactionCard(data, containerDiv) {
+    function renderTransactionCard(actionData, containerDiv) {
+        const data = actionData.data || actionData; // Fallback se passar direto
+        const action = actionData.action || 'create_transaction';
+        
         const cardDiv = document.createElement('div');
         cardDiv.className = 'action-card mt-2';
-        cardDiv.innerHTML = `
-            <h6><i class="bi bi-pencil-square"></i> Confirmar Transação</h6>
-            
-            <label class="small text-muted">Descrição</label>
-            <input type="text" class="form-control form-control-sm mb-2" id="act-desc" value="${data.descricao || ''}">
-            
-            <div class="row g-2">
-                <div class="col-6">
-                    <label class="small text-muted">Valor (R$)</label>
-                    <input type="number" step="0.01" class="form-control form-control-sm" id="act-valor" value="${data.valor}">
-                </div>
-                <div class="col-6">
-                    <label class="small text-muted">Tipo</label>
-                    <select class="form-select form-select-sm" id="act-tipo">
-                        <option value="D" ${data.tipo === 'D' ? 'selected' : ''}>Despesa</option>
-                        <option value="R" ${data.tipo === 'R' ? 'selected' : ''}>Receita</option>
-                    </select>
-                </div>
-            </div>
+        
+        let title = "Confirmar Transação";
+        let btnText = "Confirmar";
+        let btnClass = "btn-success";
+        
+        if (action === 'edit_transaction') {
+            title = "Editar Transação"; 
+            btnText = "Salvar Alterações";
+        }
+        if (action === 'delete_transaction') {
+            title = "Excluir Transação"; 
+            btnText = "Excluir Definitivamente"; 
+            btnClass = "btn-danger";
+        }
 
-            <label class="small text-muted mt-2">Categoria</label>
-            <input type="text" class="form-control form-control-sm mb-2" id="act-cat" value="${data.categoria || ''}">
-
-            <div class="row g-2">
-                <div class="col-6">
-                    <label class="small text-muted">Data</label>
-                    <input type="date" class="form-control form-control-sm" id="act-data" value="${data.data || new Date().toISOString().split('T')[0]}">
+        if (action === 'delete_transaction') {
+            cardDiv.innerHTML = `
+                <h6><i class="bi bi-trash"></i> ${title}</h6>
+                <input type="hidden" id="act-id" value="${data.id || ''}">
+                <p class="text-danger mb-2 small">Tem certeza que deseja excluir: <strong>${data.descricao}</strong> (R$ ${data.valor})?</p>
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm ${btnClass} w-100" id="btn-confirm-tx"><i class="bi bi-check-lg"></i> ${btnText}</button>
+                    <button class="btn btn-sm btn-outline-secondary w-100" id="btn-cancel-tx">Cancelar</button>
                 </div>
-                <div class="col-6">
-                    <label class="small text-muted">Pago em (Conta/Cartão)</label>
-                    <select class="form-select form-select-sm" id="act-pagamento">
-                        ${gerarOpcoesPagamento(data.conta, data.cartao)}
-                    </select>
+            `;
+        } else {
+            // Create / Edit
+            cardDiv.innerHTML = `
+                <h6><i class="bi bi-pencil-square"></i> ${title}</h6>
+                <input type="hidden" id="act-id" value="${data.id || ''}">
+                
+                <label class="small text-muted">Descrição</label>
+                <input type="text" class="form-control form-control-sm mb-2" id="act-desc" value="${data.descricao || ''}">
+                
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Valor (R$)</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="act-valor" value="${data.valor}">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">Tipo</label>
+                        <select class="form-select form-select-sm" id="act-tipo">
+                            <option value="D" ${data.tipo === 'D' ? 'selected' : ''}>Despesa</option>
+                            <option value="R" ${data.tipo === 'R' ? 'selected' : ''}>Receita</option>
+                        </select>
+                    </div>
                 </div>
-            </div>
 
-            <div class="d-flex gap-2 mt-3">
-                <button class="btn btn-sm btn-success w-100" id="btn-confirm-tx"><i class="bi bi-check-lg"></i> Confirmar</button>
-                <button class="btn btn-sm btn-outline-secondary w-100" id="btn-cancel-tx">Cancelar</button>
-            </div>
-        `;
+                <label class="small text-muted mt-2">Categoria</label>
+                ${(() => {
+                    if (data.available_categories && data.available_categories.length > 0) {
+                        let html = '<select class="form-select form-select-sm mb-2" id="act-cat">';
+                        html += '<option value="">-- Selecione --</option>';
+                        let current = data.categoria || data.categoria_nome || '';
+                        data.available_categories.forEach(cat => {
+                            let sel = (cat === current) ? 'selected' : '';
+                            html += `<option value="${cat}" ${sel}>${cat}</option>`;
+                        });
+                        // Se o valor atual não estiver na lista (ex: nova cat inferida), adiciona
+                        if (current && !data.available_categories.includes(current)) {
+                             html += `<option value="${current}" selected>${current}</option>`;
+                        }
+                        return html + '</select>';
+                    } else {
+                        return `<input type="text" class="form-control form-control-sm mb-2" id="act-cat" value="${data.categoria || data.categoria_nome || ''}">`;
+                    }
+                })()}
+
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Data</label>
+                        <input type="date" class="form-control form-control-sm" id="act-data" value="${data.data || new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">Pago em (Conta/Cartão)</label>
+                        <select class="form-select form-select-sm" id="act-pagamento">
+                            ${gerarOpcoesPagamento(data.conta || data.conta_nome, data.cartao || data.cartao_nome)}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="d-flex gap-2 mt-3">
+                    <button class="btn btn-sm ${btnClass} w-100" id="btn-confirm-tx"><i class="bi bi-check-lg"></i> ${btnText}</button>
+                    <button class="btn btn-sm btn-outline-secondary w-100" id="btn-cancel-tx">Cancelar</button>
+                </div>
+            `;
+        }
+        
         containerDiv.appendChild(cardDiv);
 
-        cardDiv.querySelector('#btn-confirm-tx').addEventListener('click', () => executarAcaoTransacao(cardDiv));
+        cardDiv.querySelector('#btn-confirm-tx').addEventListener('click', () => executarAcaoTransacao(action, cardDiv));
         cardDiv.querySelector('#btn-cancel-tx').addEventListener('click', () => { 
             cardDiv.remove(); 
             appendMessage("Cancelado.", 'bot'); 
@@ -333,21 +390,104 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- EXECUÇÃO: TRANSAÇÃO ---
-    function executarAcaoTransacao(cardElement) {
-        const pagamentoSel = cardElement.querySelector('#act-pagamento').value;
-        const [tipoPgto, nomePgto] = pagamentoSel.split(':'); // Ex: 'CONTA:Nubank' ou 'CARTAO:Visa'
+    // --- CARD: CARTÃO ---
+    function renderCardCard(actionData, containerDiv) {
+        const data = actionData.data;
+        const action = actionData.action;
+        const cardDiv = document.createElement('div');
+        cardDiv.className = 'action-card mt-2 border-primary';
+        
+        let title = "Novo Cartão";
+        let btnclass = "btn-primary";
+        if(action === 'edit_card') title = "Editar Cartão";
+        if(action === 'delete_card') { title = "Excluir Cartão"; btnclass = "btn-danger"; }
 
-        const payload = {
-            descricao: cardElement.querySelector('#act-desc').value,
-            valor: cardElement.querySelector('#act-valor').value,
-            tipo: cardElement.querySelector('#act-tipo').value,
-            categoria_nome: cardElement.querySelector('#act-cat').value,
-            data: cardElement.querySelector('#act-data').value,
-            conta_nome: (tipoPgto === 'CONTA') ? nomePgto : '',
-            cartao_nome: (tipoPgto === 'CARTAO') ? nomePgto : ''
-        };
-        enviarRequest('/api/transacoes/', 'POST', payload, cardElement, "Transação criada!", 'transactionCreated');
+        let contentObj = '';
+        if (action === 'delete_card') {
+            contentObj = `<p class="text-danger mb-2 small">Tem certeza que deseja excluir o cartão <strong>${data.nome}</strong>?</p>`;
+        } else {
+            contentObj = `
+                <label class="small text-muted">Nome</label>
+                <input type="text" class="form-control form-control-sm mb-2" id="card-nome" value="${data.nome || ''}">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Limite</label>
+                        <input type="number" step="0.01" class="form-control form-control-sm" id="card-limite" value="${data.limite || ''}">
+                    </div>
+                     <div class="col-6">
+                        <label class="small text-muted">Bandeira</label>
+                        <select class="form-select form-select-sm" id="card-bandeira">
+                            <option value="MASTERCARD" ${data.bandeira === 'MASTERCARD' ? 'selected' : ''}>Mastercard</option>
+                            <option value="VISA" ${data.bandeira === 'VISA' ? 'selected' : ''}>Visa</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row g-2 mt-2">
+                    <div class="col-6">
+                        <label class="small text-muted">Dia Venc.</label>
+                        <input type="number" class="form-control form-control-sm" id="card-venc" value="${data.dia_vencimento || ''}">
+                    </div>
+                    <div class="col-6">
+                        <label class="small text-muted">Dia Fech.</label>
+                        <input type="number" class="form-control form-control-sm" id="card-fech" value="${data.dia_fechamento || ''}">
+                    </div>
+                </div>
+            `;
+        }
+
+        cardDiv.innerHTML = `
+            <h6 class="text-primary"><i class="bi bi-credit-card"></i> ${title}</h6>
+            <input type="hidden" id="card-id" value="${data.id || ''}">
+            ${contentObj}
+            <div class="d-flex gap-2 mt-3">
+                <button class="btn btn-sm ${btnclass} w-100" id="btn-confirm-card">Confirmar</button>
+                <button class="btn btn-sm btn-outline-secondary w-100" id="btn-cancel-card">Cancelar</button>
+            </div>
+        `;
+        containerDiv.appendChild(cardDiv);
+
+        cardDiv.querySelector('#btn-confirm-card').addEventListener('click', () => executarAcaoCartao(action, cardDiv));
+        cardDiv.querySelector('#btn-cancel-card').addEventListener('click', () => { 
+            cardDiv.remove(); 
+            appendMessage("Cancelado.", 'bot');
+            saveChatState();
+        });
+    }
+
+    // --- EXECUÇÃO: TRANSAÇÃO ---
+    function executarAcaoTransacao(action, cardElement) {
+        const id = cardElement.querySelector('#act-id').value;
+        
+        let url = '/api/transacoes/';
+        let method = 'POST';
+        let body = {};
+        
+        if (action !== 'delete_transaction') {
+            const pagamentoSel = cardElement.querySelector('#act-pagamento').value;
+            const [tipoPgto, nomePgto] = pagamentoSel.split(':'); 
+            
+            body = {
+                descricao: cardElement.querySelector('#act-desc').value,
+                valor: cardElement.querySelector('#act-valor').value,
+                tipo: cardElement.querySelector('#act-tipo').value,
+                categoria_nome: cardElement.querySelector('#act-cat').value,
+                data: cardElement.querySelector('#act-data').value,
+                conta_nome: (tipoPgto === 'CONTA') ? nomePgto : '',
+                cartao_nome: (tipoPgto === 'CARTAO') ? nomePgto : ''
+            };
+        }
+
+        if (action === 'edit_transaction') {
+            url += `${id}/`; 
+            method = 'PUT';
+        } 
+        else if (action === 'delete_transaction') {
+            url += `${id}/`; 
+            method = 'DELETE';
+            body = {};
+        }
+
+        enviarRequest(url, method, body, cardElement, "Transação processada!", 'transactionCreated');
     }
 
     // --- EXECUÇÃO: CATEGORIA ---
@@ -387,6 +527,31 @@ document.addEventListener('DOMContentLoaded', function() {
 
         enviarRequest(url, method, body, cardElement, "Conta atualizada!", 'accountUpdated');
     }
+    
+    // --- EXECUÇÃO: CARTÃO ---
+    function executarAcaoCartao(action, cardElement) {
+        const id = cardElement.querySelector('#card-id').value;
+        const nome = cardElement.querySelector('#card-nome') ? cardElement.querySelector('#card-nome').value : null;
+        
+        let url = '/api/cartoes/';
+        let method = 'POST';
+        let body = {};
+        
+        if (action !== 'delete_card') {
+            body = {
+                nome: nome,
+                limite: cardElement.querySelector('#card-limite').value,
+                dia_vencimento: cardElement.querySelector('#card-venc').value,
+                dia_fechamento: cardElement.querySelector('#card-fech').value,
+                bandeira: cardElement.querySelector('#card-bandeira').value
+            };
+        }
+
+        if(action === 'edit_card') { url += `${id}/`; method = 'PUT'; }
+        if(action === 'delete_card') { url += `${id}/`; method = 'DELETE'; body = {}; }
+
+        enviarRequest(url, method, body, cardElement, "Cartão atualizado!", 'cardUpdated');
+    }
 
     // --- HELPER DE REQUEST GENÉRICO ---
     function enviarRequest(url, method, body, cardElement, successMsg, customEventType) {
@@ -402,9 +567,25 @@ document.addEventListener('DOMContentLoaded', function() {
             },
             body: Object.keys(body).length > 0 ? JSON.stringify(body) : null
         })
-        .then(r => {
-             if(r.ok || r.status === 204) return r.ok ? r.json() : {}; 
-             throw new Error("Erro na requisição");
+        .then(async r => {
+             if (r.status === 204) return {};
+             if (r.ok) return r.json(); 
+             // Tenta extrair erro do JSON
+             let errorMsg = "Erro na requisição";
+             try {
+                 const errData = await r.json();
+                 // Se for erro de validação (DRF retorna objeto {campo: [erros]})
+                 if (typeof errData === 'object') {
+                     // Pega o primeiro valor da primeira chave
+                     const values = Object.values(errData);
+                     if (values.length > 0) errorMsg = values[0][0] || JSON.stringify(errData);
+                     else errorMsg = JSON.stringify(errData);
+                 }
+             } catch(e) {
+                 console.error("Erro ao fazer parse do JSON de erro:", e);
+             }
+             console.error("Erro API:", r.status, r.statusText, errorMsg);
+             throw new Error(errorMsg);
         })
         .then(data => {
             cardElement.innerHTML = `<div class="text-success"><i class="bi bi-check-circle-fill"></i> ${successMsg}</div>`;
@@ -412,7 +593,9 @@ document.addEventListener('DOMContentLoaded', function() {
             saveChatState(); // Salva estado atualizado (card sucesso)
         })
         .catch(err => {
-            alert('Erro ao processar ação. Verifique os dados.');
+            // Remove o prefixo "Error: " se existir
+            let msg = err.toString().replace('Error: ', '');
+            alert('❌ ' + msg);
             btn.disabled = false;
             btn.innerHTML = 'Tentar Novamente';
         });

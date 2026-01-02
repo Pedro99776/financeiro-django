@@ -87,12 +87,12 @@ class TransacaoCreateSerializer(serializers.Serializer):
     descricao = serializers.CharField(max_length=200)
     valor = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=0.01)
     tipo = serializers.ChoiceField(choices=[('D', 'Despesa'), ('R', 'Receita')])
-    categoria_nome = serializers.CharField(max_length=100, required=False)
-    tipo = serializers.ChoiceField(choices=[('D', 'Despesa'), ('R', 'Receita')])
-    categoria_nome = serializers.CharField(max_length=100, required=False)
-    conta_nome = serializers.CharField(max_length=100, required=False)
-    cartao_nome = serializers.CharField(max_length=100, required=False) # Novo
-    data = serializers.DateField(required=False)
+    
+    # Campos opcionais (allow_blank para permitir string vazia do frontend)
+    categoria_nome = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    conta_nome = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    cartao_nome = serializers.CharField(max_length=100, required=False, allow_blank=True, allow_null=True)
+    
     data = serializers.DateField(required=False)
 
     def validate(self, data):
@@ -164,6 +164,53 @@ class TransacaoCreateSerializer(serializers.Serializer):
         )
 
         return transacao
+
+    def update(self, instance, validated_data):
+        """Atualiza transação com lookup inteligente de categoria/conta"""
+        usuario = self.context['request'].user
+        
+        # 1. Atualizar campos simples
+        instance.descricao = validated_data.get('descricao', instance.descricao)
+        instance.valor = validated_data.get('valor', instance.valor)
+        instance.tipo = validated_data.get('tipo', instance.tipo)
+        instance.data = validated_data.get('data', instance.data)
+
+        # 2. Resolver Categoria (se fornecida)
+        if 'categoria_nome' in validated_data:
+            categoria_nome = validated_data.get('categoria_nome')
+            if categoria_nome:
+                categoria, _ = Categoria.objects.get_or_create(nome=categoria_nome, usuario=usuario)
+                instance.categoria = categoria
+            # Se vier vazio, não altera ou seta null? No chatbot.js, sempre enviamos o valor do input.
+            # Vamos assumir que se o usuário limpar o input, ele quer remover a categoria?
+            # Ou manter a anterior? Por segurança, se string vazia, remove categoria.
+            elif categoria_nome == "":
+                 instance.categoria = None
+
+        # 3. Resolver Conta/Cartão (se fornecidos)
+        # Lógica: Se vier cartao_nome, tenta setar cartão e limpar conta.
+        # Se vier conta_nome, tenta setar conta e limpar cartão.
+        # O frontend envia ambos? O dropdown seleciona um. O outro vem vazio.
+        
+        cartao_nome = validated_data.get('cartao_nome')
+        conta_nome = validated_data.get('conta_nome')
+
+        if cartao_nome:
+            cartao = CartaoCredito.objects.filter(usuario=usuario, nome__iexact=cartao_nome).first()
+            if cartao:
+                instance.cartao = cartao
+                instance.conta = None # Transação de cartão não tem conta associada diretamente na origem
+        
+        elif conta_nome:
+            try:
+                conta = Conta.objects.get(nome__iexact=conta_nome, usuario=usuario)
+                instance.conta = conta
+                instance.cartao = None
+            except Conta.DoesNotExist:
+                raise serializers.ValidationError({'conta_nome': f'Conta "{conta_nome}" não encontrada'})
+
+        instance.save()
+        return instance
 
 
 class ResumoFinanceiroSerializer(serializers.Serializer):

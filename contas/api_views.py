@@ -188,8 +188,8 @@ class TransacaoViewSet(viewsets.ModelViewSet):
         return queryset
 
     def get_serializer_class(self):
-        # Usa o serializer otimizado para criação (chatbot) no POST
-        if self.action == 'create':
+        # Usa o serializer otimizado para criação (chatbot) no POST e PUT/PATCH (edição simplificada)
+        if self.action in ['create', 'update', 'partial_update']:
             return TransacaoCreateSerializer
         return TransacaoSerializer
 
