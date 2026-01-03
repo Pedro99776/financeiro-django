@@ -8,64 +8,41 @@ from .models import Transacao, FaturaCredito
 @receiver(pre_save, sender=Transacao)
 def vincular_transacao_a_fatura(sender, instance, **kwargs):
     """
-    Antes de salvar uma transação de cartão de crédito:
-    1. Calcula a qual fatura ela pertence baseada na data e dia de fechamento.
-    2. Cria a fatura se não existir.
-    3. Associa a transação à fatura.
+    1. Rastreia fatura antiga (para atualizar se mudar).
+    2. Calcula/Vincula nova fatura (se for cartão).
     """
-    # Se for cartão, sempre verifica/recalcula a fatura (para suportar alteração de data)
-    if instance.cartao:
-        cartao = instance.cartao
-        data_transacao = instance.data
-        dia_fechamento = cartao.dia_fechamento
-        dia_vencimento = cartao.dia_vencimento
-
-        # Lógica de Fechamento
-        if data_transacao.day < dia_fechamento:
-            # Pertence à fatura que fecha neste mês
-            data_base = data_transacao
-        else:
-            # Pertence à fatura que fecha no mês seguinte
-            data_base = data_transacao + relativedelta(months=1)
-
-        # Mes Referencia: 1º dia do mês do fechamento
-        mes_referencia = date(data_base.year, data_base.month, 1)
-        
-        # Datas calculadas da Fatura
+    # A. Rastrear Fatura Antiga
+    instance._old_fatura_pk = None
+    instance._old_fatura_pagamento_pk = None
+    
+    if instance.pk:
         try:
-            fechamento_calc = date(data_base.year, data_base.month, dia_fechamento)
-        except ValueError: 
-            ultimo_dia = data_base + relativedelta(day=31)
-            fechamento_calc = ultimo_dia
+            old = Transacao.objects.get(pk=instance.pk)
+            instance._old_fatura_pk = old.fatura_id
+            instance._old_fatura_pagamento_pk = old.fatura_pagamento_id
+        except Transacao.DoesNotExist:
+            pass
 
-        # Lógica de Vencimento
-        if dia_vencimento > dia_fechamento:
-            vencimento_calc = date(fechamento_calc.year, fechamento_calc.month, dia_vencimento)
-        else:
-            prox_mes = fechamento_calc + relativedelta(months=1)
-            try:
-                vencimento_calc = date(prox_mes.year, prox_mes.month, dia_vencimento)
-            except ValueError:
-                vencimento_calc = prox_mes + relativedelta(day=31)
+    # B. Se for cartão, sempre verifica/recalcula a fatura (para suportar alteração de data)
+    if instance.cartao and instance.data: # data is needed
+        mes_ref, fechamento, vencimento = Transacao.calcular_fatura(instance.cartao, instance.data)
 
         # Buscar ou Criar Fatura
         fatura, created = FaturaCredito.objects.get_or_create(
-            cartao=cartao,
-            mes_referencia=mes_referencia,
+            cartao=instance.cartao,
+            mes_referencia=mes_ref,
             defaults={
-                'data_fechamento': fechamento_calc,
-                'data_vencimento': vencimento_calc,
+                'data_fechamento': fechamento,
+                'data_vencimento': vencimento,
                 'valor_total': 0
             }
         )
         
-        # Só atualiza e recalcula se a fatura mudou
-        if instance.fatura != fatura:
+        # Só atualiza fk se mudou
+        if instance.fatura_id != fatura.id:
             instance.fatura = fatura
-            # Nota: O post_save vai cuidar de atualizar os totais da fatura antiga e nova
-            # porque a transação mudou de 'dono'.
-            
-    # Se deixou de ser cartão (ex: mudou para conta), remove fatura
+
+    # Se deixou de ser cartão, remove fatura
     if not instance.cartao and instance.fatura:
         instance.fatura = None
 
@@ -74,13 +51,93 @@ def vincular_transacao_a_fatura(sender, instance, **kwargs):
 @receiver(post_delete, sender=Transacao)
 def atualizar_valor_fatura(sender, instance, **kwargs):
     """
-    Atualiza o valor total da fatura sempre que uma transação vinculada é salva ou excluída.
+    Signal Unificado: Atualiza Totais e Status da Fatura.
+    Rastreia a fatura ATUAL e a ANTIGA (se houve mudança).
     """
-    if instance.fatura:
-        fatura = instance.fatura
-        # Recalcula soma (Despesas - Receitas)
-        despesas = Transacao.objects.filter(fatura=fatura, tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
-        receitas = Transacao.objects.filter(fatura=fatura, tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
-        fatura.valor_total = despesas - receitas
-        fatura.save()
+    faturas_ids = set()
 
+    # 1. Identifica IDs de Faturas Afetadas
+    if instance.fatura_id: 
+        faturas_ids.add(instance.fatura_id)
+    if instance.fatura_pagamento_id: 
+        faturas_ids.add(instance.fatura_pagamento_id)
+    
+    # Adiciona as antigas (capturadas no pre_save)
+    if getattr(instance, '_old_fatura_pk', None):
+        faturas_ids.add(instance._old_fatura_pk)
+    if getattr(instance, '_old_fatura_pagamento_pk', None):
+        faturas_ids.add(instance._old_fatura_pagamento_pk)
+    
+    for fid in faturas_ids:
+        try:
+            fatura = FaturaCredito.objects.get(pk=fid)
+            
+            # Estado Anterior (para detecção de inconsistência)
+            estava_paga = fatura.paga
+            
+            # A. Calcula Totais
+            despesas = Transacao.objects.filter(fatura=fatura, tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+            receitas = Transacao.objects.filter(fatura=fatura, tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+            nova_fatura_total = despesas - receitas
+
+            novo_valor_pago = fatura.pagamentos.aggregate(Sum('valor'))['valor__sum'] or 0
+            
+            # Atualiza valores
+            fatura.valor_total = nova_fatura_total
+            fatura.valor_pago = novo_valor_pago
+            
+            # B. Define Status
+            saldo = fatura.valor_total - fatura.valor_pago
+            hoje = date.today()
+            
+            # ✅ CORRIGIDO: Inicializa variáveis
+            novo_status = 'ABERTA'
+            nova_flag_paga = False
+            atencao = False  # ← CRÍTICO: Inicializar aqui!
+
+            # Lógica de status
+            if saldo <= 0.01 and saldo >= -0.01:
+                novo_status = 'PAGA'
+                nova_flag_paga = True
+                atencao = False  # Tudo ok
+                
+            elif saldo < -0.01:
+                novo_status = 'CREDITO'
+                nova_flag_paga = True
+                atencao = True  # Pagou mais que devia
+                
+            elif fatura.valor_pago > 0:
+                novo_status = 'PARCIAL'
+                nova_flag_paga = False
+                atencao = False  # Parcial é normal
+                
+            else:
+                # Nenhum pagamento ainda
+                # ✅ NOVO: Detecta atraso
+                if hoje > fatura.data_vencimento:
+                    novo_status = 'ATRASADA'
+                    atencao = True  # Atrasado!
+                elif hoje > fatura.data_fechamento:
+                    novo_status = 'FECHADA'
+                else:
+                    novo_status = 'ABERTA'
+                
+                nova_flag_paga = False
+                # atencao já está corretamente setado acima
+
+            # C. Detecção de Inconsistência (Mudança após Paga)
+            if estava_paga and not nova_flag_paga:
+                # Estava paga, agora não está mais
+                # Significa que valor aumentou sem pagamento adicional
+                novo_status = 'INCONSISTENTE'
+                atencao = True
+            
+            # Atualiza fatura
+            fatura.status = novo_status
+            fatura.paga = nova_flag_paga
+            fatura.requer_atencao = atencao
+            fatura.save()
+
+        except FaturaCredito.DoesNotExist:
+            # Fatura foi deletada, ignora
+            continue

@@ -375,6 +375,15 @@ def _gerenciar_transacao_func(usuario, acao, id=None, descricao=None, valor=None
                 except Transacao.DoesNotExist: 
                     return "❌ Transação não encontrada ou você não tem permissão."
             
+            # PROTEÇÃO DE INTEGRIDADE
+            if t.fatura_pagamento:
+                 return "❌ Erro: Esta transação é um pagamento de fatura e não pode ser editada diretamente."
+            if t.categoria and "pagamento fatura" in t.categoria.nome.lower():
+                 return "❌ Erro: Transação de 'Pagamento Fatura' não pode ser editada."
+            if t.fatura and t.fatura.paga:
+                 # Se mudar valor, quebra. No chat, bloqueamos qualquer revisão em fatura paga por segurança.
+                 return "❌ Erro: Fatura já paga. Não é possível editar transações pelo Chat."
+            
             return {
                 "type": "action_proposal",
                 "action": "edit_transaction",
@@ -411,6 +420,14 @@ def _gerenciar_transacao_func(usuario, acao, id=None, descricao=None, valor=None
                     )
                 except Transacao.DoesNotExist: 
                     return "❌ Transação não encontrada ou você não tem permissão."
+
+                # PROTEÇÃO DE INTEGRIDADE
+                if t.fatura_pagamento:
+                     return "❌ Erro: Pagamento de fatura não pode ser excluído diretamente."
+                if t.categoria and "pagamento fatura" in t.categoria.nome.lower():
+                     return "❌ Erro: Transação de 'Pagamento Fatura' não pode ser excluída."
+                if t.fatura and t.fatura.paga:
+                     return "❌ Erro: Transação em fatura paga não pode ser excluída."
 
             return {
                 "type": "action_proposal",

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.db.models import Sum
 from datetime import datetime
-from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
+from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito, Objetivo
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -30,7 +30,7 @@ class ContaSerializer(serializers.ModelSerializer):
 
         despesas = Transacao.objects.filter(
             conta=obj,
-            tipo='D'
+            tipo__in=['D', 'I']
         ).aggregate(Sum('valor'))['valor__sum'] or 0
 
         return float(obj.saldo_inicial + receitas - despesas)
@@ -69,6 +69,10 @@ class TransacaoSerializer(serializers.ModelSerializer):
     categoria_nome = serializers.CharField(source='categoria.nome', read_only=True, allow_null=True)
     conta_nome = serializers.CharField(source='conta.nome', read_only=True, allow_null=True)
     cartao_nome = serializers.CharField(source='cartao.nome', read_only=True, allow_null=True)
+    
+    # Campos para resolução de conflito em faturas pagas
+    resolution = serializers.CharField(write_only=True, required=False)
+    conta_resolucao_id = serializers.IntegerField(write_only=True, required=False)
 
     class Meta:
         model = Transacao
@@ -76,7 +80,8 @@ class TransacaoSerializer(serializers.ModelSerializer):
             'id', 'data', 'descricao', 'valor', 'tipo',
             'categoria', 'categoria_nome',
             'conta', 'conta_nome',
-            'cartao', 'cartao_nome'
+            'cartao', 'cartao_nome',
+            'resolution', 'conta_resolucao_id'
         ]
         read_only_fields = ['id']
 
@@ -228,3 +233,15 @@ class GastosPorCategoriaSerializer(serializers.Serializer):
     total = serializers.DecimalField(max_digits=10, decimal_places=2)
     percentual = serializers.DecimalField(max_digits=5, decimal_places=2)
     quantidade_transacoes = serializers.IntegerField()
+
+
+class ObjetivoSerializer(serializers.ModelSerializer):
+    """Serializer para Objetivos (Cofrinho)"""
+    class Meta:
+        model = Objetivo
+        fields = '__all__'
+        read_only_fields = ['usuario', 'valor_atual']
+
+    def create(self, validated_data):
+        validated_data['usuario'] = self.context['request'].user
+        return super().create(validated_data)

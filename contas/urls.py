@@ -11,6 +11,7 @@ router.register(r'api/contas', api_views.ContaViewSet, basename='api-conta')
 router.register(r'api/cartoes', api_views.CartaoCreditoViewSet, basename='api-cartaocredito')
 router.register(r'api/faturas', api_views.FaturaViewSet, basename='api-fatura')
 router.register(r'api/analytics', api_views.AnalyticsViewSet, basename='api-analytics')
+router.register(r'api/objetivos', api_views.ObjetivoViewSet, basename='api-objetivo')
 
 urlpatterns = [
     path('', views.listagem_transacoes, name='listagem'),
@@ -26,6 +27,7 @@ urlpatterns = [
     path('transacoes-api/', views.transacoes_api, name='transacoes_api'),
     path('gerenciar/', views.gerenciar, name='gerenciar'),
     path('faturas/', views.faturas, name='faturas'),
+    path('objetivos/', views.objetivos, name='objetivos'),
     
     # --- API DRF Router ---Endpoints
     path('api/chat/', views.chat_api, name='chat_api'),

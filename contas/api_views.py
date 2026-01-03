@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
 from django.shortcuts import get_object_or_404
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
@@ -98,8 +98,18 @@ class FaturaViewSet(BaseUserViewSet):
     @action(detail=True, methods=['post'])
     def pagar(self, request, pk=None):
         fatura = self.get_object()
-        if fatura.paga:
-             return Response({'error': 'Fatura já paga'}, status=400)
+        fatura = self.get_object()
+        
+        # Valor a pagar (default: saldo restante)
+        saldo_restante = fatura.valor_total - fatura.valor_pago
+        valor_pagar = Decimal(request.data.get('valor', saldo_restante))
+        
+        if valor_pagar <= 0:
+             return Response({'error': 'Valor deve ser positivo'}, status=400)
+             
+        if valor_pagar > saldo_restante:
+             if not request.data.get('force_overpay'): # Opcional: permitir pagar a mais?
+                 return Response({'error': f'Valor excede o restante da fatura (R$ {saldo_restante})'}, status=400)
              
         conta_id = request.data.get('conta_id')
         if not conta_id:
@@ -108,44 +118,190 @@ class FaturaViewSet(BaseUserViewSet):
         # Lógica de Pagamento
         conta = get_object_or_404(Conta, pk=conta_id, usuario=request.user)
         
-        if conta.saldo_atual < fatura.valor_total:
-             # Opcional: Permitir saldo negativo? Sim.
-             pass
-             
         # Garante categoria 'Pagamento de Fatura'
         cat_pgto, _ = Categoria.objects.get_or_create(nome="Pagamento Fatura", usuario=request.user)
+        
+        # Descrição com Mês (Importante p/ user request)
+        mes_str = fatura.mes_referencia.strftime('%m/%Y')
+        desc = f"Pagamento Fatura {fatura.cartao.nome} ({mes_str})"
+        if valor_pagar < saldo_restante:
+            desc += " - Parcial"
 
         # Criar Transação de Pagamento
         Transacao.objects.create(
             conta=conta,
             categoria=cat_pgto,
-            descricao=f"Pagamento Fatura {fatura.cartao.nome}",
-            valor=fatura.valor_total,
+            descricao=desc,
+            valor=valor_pagar,
             tipo='D',
             data=datetime.now().date(),
-
+            fatura_pagamento=fatura # VINCULO DE SEGURANÇA
         )
         
-        fatura.paga = True
-        fatura.data_pagamento = datetime.now().date()
+        # Atualiza Status da Fatura
+        fatura.valor_pago += valor_pagar
+        fatura.data_pagamento = datetime.now().date() # Data do último pagamento
+        
+        if fatura.valor_pago >= fatura.valor_total - Decimal('0.01'): # Tolerância de centavos
+            fatura.paga = True
+            
         fatura.save()
         
-        return Response({'status': 'Fatura paga com sucesso'})
+        return Response({
+            'status': 'Pagamento registrado', 
+            'paga': fatura.paga, 
+            'saldo_restante': fatura.valor_total - fatura.valor_pago
+        })
 
 
 
 class TransacaoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
+    from rest_framework.exceptions import ValidationError
+
     def perform_create(self, serializer):
+        data = serializer.validated_data
+        cartao = data.get('cartao')
+        data_tx = data.get('data')
+        
+        # Validar criação em fatura PAGA
+        if cartao and data_tx:
+            # Simula a atribuição da fatura
+            mes_ref, _, _ = Transacao.calcular_fatura(cartao, data_tx)
+            
+            # Tenta achar a fatura
+            fatura = FaturaCredito.objects.filter(cartao=cartao, mes_referencia=mes_ref).first()
+            if fatura and fatura.status in ['PAGA', 'CREDITO']: # Inconsistência
+                # Opções: Adicionar na próxima? (Mudar Data)
+                # Para simplificar na criação, retornamos erro pedindo revisão.
+                raise ValidationError({
+                     "code": "INVOICE_PAID_CREATION",
+                     "message": f"A fatura de {mes_ref.strftime('%m/%Y')} já está paga. Não é possível adicionar novas compras nela.",
+                     "options": [
+                         {"key": "add_next", "label": "Adicionar na próxima fatura (Muda data)"}
+                     ]
+                })
+
         serializer.save()
         limpar_cache_contexto(self.request.user)
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        resolution = serializer.validated_data.get('resolution')
+        conta_resolucao_id = serializer.validated_data.get('conta_resolucao_id')
+        
+        # 1. Bloqueia edição de transação de pagamento de fatura
+        if instance.fatura_pagamento:
+             raise ValidationError("Não é permitido editar o pagamento da fatura diretamente. Use a tela de faturas.")
+             
+        # Check legado por nome da categoria
+        if instance.categoria and "pagamento fatura" in instance.categoria.nome.lower():
+             raise ValidationError("Não é permitido editar transação de 'Pagamento Fatura'.")
+
+        # 2. Verifica se a transação pertence a uma fatura PAGA
+        if instance.fatura and instance.fatura.paga:
+             old_val = instance.valor
+             new_val = serializer.validated_data.get('valor', instance.valor)
+             
+             if old_val != new_val:
+                 diff = new_val - old_val # Positivo = Aumento, Negativo = Diminuição
+                 
+                 # Se nenhuma estratégia foi definida, retorna ERRO com OPÇÕES
+                 if not resolution:
+                     code = "INVOICE_PAID_INCREASE" if diff > 0 else "INVOICE_PAID_DECREASE"
+                     options = []
+                     if diff > 0:
+                         options = [
+                             {"key": "pay_diff", "label": f"Pagar a diferença agora (R$ {diff})", "needs_account": True},
+                             {"key": "add_next", "label": "Adicionar na próxima fatura"},
+                             {"key": "cancel_edit", "label": "Remover/Cancelar edição"}
+                         ]
+                     else:
+                         options = [
+                             {"key": "add_next_credit", "label": "Usar na próxima fatura (Crédito)"}, # Default logic usually
+                             {"key": "refund", "label": f"Estornar pra conta (Devolve R$ {abs(diff)})", "needs_account": True},
+                             {"key": "keep_credit", "label": "Deixar como está (Crédito no cartão)"}
+                         ]
+                     
+                     raise ValidationError({
+                         "code": code,
+                         "message": "Fatura já paga. Escolha uma ação para a diferença de valor.",
+                         "options": options,
+                         "diff": diff
+                     })
+
+                 # Executa Estratégia de Resolução
+                 user = self.request.user
+                 
+                 if resolution == 'pay_diff': # Opção A (Aumento)
+                     if not conta_resolucao_id: raise ValidationError("Conta para pagamento necessária.")
+                     conta = get_object_or_404(Conta, pk=conta_resolucao_id, usuario=user)
+                     
+                     # Cria pagamento da diferença
+                     cat_pgto, _ = Categoria.objects.get_or_create(nome="Pagamento Fatura", usuario=user)
+                     Transacao.objects.create(
+                        conta=conta,
+                        categoria=cat_pgto,
+                        descricao=f"Pagamento Diferença Fatura {instance.fatura.cartao.nome}",
+                        valor=diff,
+                        tipo='D',
+                        data=datetime.now().date(),
+                        fatura_pagamento=instance.fatura
+                     )
+                     # Atualiza fatura
+                     instance.fatura.valor_pago += diff
+                     instance.fatura.save()
+
+                 elif resolution == 'add_next': # Opção B (Aumento) -> Move a transação inteira? OU Cria nova?
+                     # O pedido diz "Adicionar na próxima". Melhor mover a data PARA O FUTURO.
+                     # Mas isso remove da fatura atual. "Paga" ok.
+                     # Vamos mover para Hoje (ou amanhã) para cair na fatura aberta.
+                     serializer.validated_data['data'] = datetime.now().date()
+                     # Isso fará o sistema recalcular a fatura no save() automático se a lógica de atribuição de fatura rodar.
+                     # Como Fatura é FK direta, precisamos limpar a FK para que o sistema (signal?) reatribua? 
+                     # Por hora, assumindo que mudar a data tira da fatura paga se reatribuirmos.
+                     serializer.validated_data['fatura'] = None # Força re-vínculo
+
+                 elif resolution == 'refund': # Opção B (Diminuição)
+                     if not conta_resolucao_id: raise ValidationError("Conta para estorno necessária.")
+                     conta = get_object_or_404(Conta, pk=conta_resolucao_id, usuario=user)
+                     cat_estorno, _ = Categoria.objects.get_or_create(nome="Estorno", usuario=user)
+                     Transacao.objects.create(
+                        conta=conta,
+                        categoria=cat_estorno,
+                        descricao=f"Estorno Diferença Fatura {instance.fatura.cartao.nome}",
+                        valor=abs(diff),
+                        tipo='R', # Receita
+                        data=datetime.now().date()
+                     )
+                     # Diminui valor pago na fatura pois devolvemos pro usuario? 
+                     instance.fatura.valor_pago -= abs(diff)
+                     instance.fatura.save()
+
+                 elif resolution in ['keep_credit', 'add_next_credit']: 
+                     # Opção A/C (Diminuição)
+                     # keep_credit: Apenas salva. O valor da fatura diminui, o valor pago se mantém.
+                     # Fatura fica com saldo positivo (Crédito).
+                     pass 
+
+                 elif resolution == 'cancel_edit':
+                     return # Aborta save
+
         serializer.save()
         limpar_cache_contexto(self.request.user)
 
     def perform_destroy(self, instance):
+        if instance.fatura_pagamento:
+             raise ValidationError("Não é permitido excluir o pagamento da fatura diretamente.")
+             
+        # Check legado
+        if instance.categoria and "pagamento fatura" in instance.categoria.nome.lower():
+             raise ValidationError("Não é permitido excluir transação de 'Pagamento Fatura'.")
+             
+        if instance.fatura and instance.fatura.paga:
+             raise ValidationError("Não é permitido excluir uma compra de uma fatura já paga.")
+             
         instance.delete()
         limpar_cache_contexto(self.request.user)
 
@@ -273,3 +429,72 @@ class AnalyticsViewSet(viewsets.ViewSet):
 
         serializer = GastosPorCategoriaSerializer(resultado, many=True)
         return Response(serializer.data)
+
+
+from .models import Objetivo
+from .serializers import ObjetivoSerializer
+
+class ObjetivoViewSet(viewsets.ModelViewSet):
+    """Viewset para Cofrinho/Objetivos"""
+    serializer_class = ObjetivoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Objetivo.objects.filter(usuario=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def depositar(self, request, pk=None):
+        objetivo = self.get_object()
+        valor = Decimal(request.data.get('valor', 0))
+        conta_id = request.data.get('conta_id')
+        
+        if valor <= 0:
+            return Response({'error': 'Valor deve ser positivo'}, status=400)
+            
+        conta = get_object_or_404(Conta, pk=conta_id, usuario=request.user)
+        
+        # 1. Cria transação de saída (Investimento)
+        Transacao.objects.create(
+            conta=conta,
+            objetivo=objetivo,
+            valor=valor,
+            tipo='I', # Investimento (Sai da Conta)
+            data=date.today(),
+            descricao=f"Depósito: {objetivo.nome}"
+        )
+        
+        # 2. Atualiza Saldo do Objetivo
+        objetivo.valor_atual += valor
+        objetivo.save()
+        
+        return Response({'status': 'Depósito realizado', 'valor_atual': objetivo.valor_atual})
+
+    @action(detail=True, methods=['post'])
+    def resgatar(self, request, pk=None):
+        objetivo = self.get_object()
+        valor = Decimal(request.data.get('valor', 0))
+        conta_id = request.data.get('conta_id')
+        
+        if valor <= 0:
+            return Response({'error': 'Valor deve ser positivo'}, status=400)
+        
+        if valor > objetivo.valor_atual:
+             return Response({'error': 'Saldo insuficiente no objetivo'}, status=400)
+
+        conta = get_object_or_404(Conta, pk=conta_id, usuario=request.user)
+        
+        # 1. Cria transação de entrada (Receita de Resgate)
+        Transacao.objects.create(
+            conta=conta,
+            objetivo=objetivo,
+            valor=valor,
+            tipo='R', # Receita (Entra na Conta)
+            data=date.today(),
+            descricao=f"Resgate: {objetivo.nome}"
+        )
+        
+        # 2. Atualiza Saldo do Objetivo
+        objetivo.valor_atual -= valor
+        objetivo.save()
+        
+        return Response({'status': 'Resgate realizado', 'valor_atual': objetivo.valor_atual})

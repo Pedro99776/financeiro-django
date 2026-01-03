@@ -3,7 +3,8 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db.models import Sum, Q
 from django.db import IntegrityError, transaction
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+import calendar
 from decimal import Decimal
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
@@ -177,17 +178,48 @@ def transacoes_api(request):
         grafico_receitas = [dados_dict[m]['R'] for m in range(1, 13)]
         grafico_despesas = [dados_dict[m]['D'] for m in range(1, 13)]
     else:
+        # 1. Determina o Range de Datas Completo
+        dt_start = None
+        dt_end = None
+
+        if data_inicio:
+             dt_start = datetime.strptime(data_inicio, '%Y-%m-%d').date()
+        else:
+             dt_start = date(ano_filtrado, mes_filtrado, 1)
+
+        if data_fim:
+             dt_end = datetime.strptime(data_fim, '%Y-%m-%d').date()
+        else:
+             # Se tem inicio mas nao fim, assume ate hoje (conforme filtro qs)
+             if data_inicio:
+                  dt_end = hoje.date()
+             else:
+                  # Mes completo
+                  _, last_day = calendar.monthrange(ano_filtrado, mes_filtrado)
+                  dt_end = date(ano_filtrado, mes_filtrado, last_day)
+
+        # 2. Inicializa dicionário com TODOS os dias do range
+        dados_dict_dias = {}
+        curr = dt_start
+        while curr <= dt_end:
+             label = curr.strftime("%d")
+             dados_dict_dias[label] = {'R': 0, 'D': 0}
+             curr += timedelta(days=1)
+
+        # 3. Busca dados agrupados
         dados_agrupados = transacoes_qs.order_by().annotate(periodo=TruncDay('data')).values('periodo', 'tipo').annotate(
             total=Sum('valor')).order_by('periodo')
         formato_data = "%d"
 
-        dados_dict_dias = {}
+        # 4. Preenche com valores reais
         for item in dados_agrupados:
             label = item['periodo'].strftime(formato_data)
             tipo = item['tipo']
             valor = float(item['total'])
-            if label not in dados_dict_dias: dados_dict_dias[label] = {'R': 0, 'D': 0}
-            dados_dict_dias[label][tipo] += valor
+            
+            # Proteção: Se a transação estiver fora do range (improvável pelo filtro, mas possível em edge cases)
+            if label in dados_dict_dias:
+                dados_dict_dias[label][tipo] += valor
 
         grafico_labels = sorted(dados_dict_dias.keys())
         grafico_receitas = [dados_dict_dias[label]['R'] for label in grafico_labels]
@@ -597,3 +629,9 @@ def faturas(request):
     return render(request, 'contas/faturas.html', {'nbar': 'faturas'})
 
 
+@login_required
+def objetivos(request):
+    """
+    Renderiza a página de Objetivos (Cofrinho).
+    """
+    return render(request, 'contas/objetivos.html', {'nbar': 'objetivos'})
