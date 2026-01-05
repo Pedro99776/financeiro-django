@@ -166,9 +166,9 @@
         {% endif %}
     </div>
 
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'listagem' %}">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top py-3">
+        <div class="container-fluid">
+            <a class="navbar-brand ms-3" href="{% url 'listagem' %}">
                 <i class="bi bi-wallet2"></i> Financeiro
             </a>
 
@@ -176,86 +176,84 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <div class="collapse navbar-collapse justify-content-end" id="navbarNav">
-                <ul class="navbar-nav align-items-center">
+            <div class="collapse navbar-collapse" id="navbarNav">
+                {% if user.is_authenticated %}
+                <!-- Lista Única Alinhada à Direita -->
+                <ul class="navbar-nav align-items-center ms-auto me-5">
+                    
+                    <!-- Ações Rápidas (Agora maiores e no início do grupo direito) -->
+                    <li class="nav-item me-2">
+                        <a class="btn btn-primary" href="{% url 'nova_transacao' %}">
+                            <i class="bi bi-plus-lg"></i> Adicionar
+                        </a>
+                    </li>
+                    <li class="nav-item me-5">
+                        <a class="btn btn-success" href="{% url 'importar_extrato' %}">
+                            <i class="bi bi-cloud-upload"></i> Importar
+                        </a>
+                    </li>
 
-                    {% if user.is_authenticated %}
+                    <!-- Links Principais -->
+                    <li class="nav-item">
+                        <a class="nav-link text-white {% if nbar == 'gerenciar' %}fw-bold{% endif %}" href="{% url 'gerenciar' %}">
+                            <i class="bi bi-gear"></i> Cadastros
+                        </a>
+                    </li>
 
-                        <li class="nav-item dropdown">
+                    <li class="nav-item border-start border-secondary mx-2" style="height: 24px;"></li>
 
-                            <ul class="navbar-nav align-items-center">
-                                {% if user.is_authenticated %}               
+                    <li class="nav-item">
+                        <a class="nav-link text-white {% if nbar == 'estatisticas' %}fw-bold{% endif %}" href="{% url 'estatisticas' %}">
+                            <i class="bi bi-bar-chart-line"></i> Estatísticas
+                        </a>
+                    </li>
 
-                                    <li class="nav-item me-2">
-                                        <a class="btn btn-primary btn-sm" href="{% url 'nova_transacao' %}">
-                                            <i class="bi bi-plus-lg"></i> Adicionar
-                                        </a>
-                                    </li>
+                    <li class="nav-item border-start border-secondary mx-2" style="height: 24px;"></li>
 
-                                    <li class="nav-item me-2">
-                                        <a class="btn btn-success btn-sm" href="{% url 'importar_extrato' %}">
-                                            <i class="bi bi-cloud-upload"></i> Importar
-                                        </a>
-                                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white {% if nbar == 'faturas' %}fw-bold{% endif %}" href="{% url 'faturas' %}">
+                            <i class="bi bi-receipt"></i> Faturas
+                        </a>
+                    </li>
 
-                                    <li class="nav-item me-2">
-                                        <a class="nav-link text-white {% if nbar == 'gerenciar' %}fw-bold{% endif %}" href="{% url 'gerenciar' %}">
-                                            <i class="bi bi-gear"></i> Gerenciar Categorias/Contas
-                                        </a>
-                                    </li>
+                    <li class="nav-item border-start border-secondary mx-2" style="height: 24px;"></li>
 
-                                    <li class="nav-item border-start ps-3 me-2">
-                                        <a class="nav-link text-white {% if nbar == 'faturas' %}fw-bold{% endif %}" href="{% url 'faturas' %}">
-                                            <i class="bi bi-receipt"></i> Faturas
-                                        </a>
-                                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white {% if nbar == 'objetivos' %}fw-bold{% endif %}" href="{% url 'objetivos' %}">
+                            <i class="bi bi-piggy-bank"></i> Objetivos
+                        </a>
+                    </li>
 
-                                    <li class="nav-item border-start ps-3 me-2">
-                                        <a class="nav-link text-white {% if nbar == 'objetivos' %}fw-bold{% endif %}" href="{% url 'objetivos' %}">
-                                            <i class="bi bi-piggy-bank"></i> Objetivos
-                                        </a>
-                                    </li>
+                    <li class="nav-item border-start border-secondary mx-2" style="height: 24px;"></li>
 
-                                    <li class="nav-item border-start ps-3 ms-2 d-flex align-items-center">
-                                        <span class="text-white-50 small me-2">{{ user.username }}</span>
-                                        <form action="{% url 'logout' %}" method="post" class="d-inline">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-link text-white p-0" title="Sair">
-                                                <i class="bi bi-power"></i>
-                                            </button>
-                                        </form>
-                                    </li>
-
-                                {% else %}
-                                    <li class="nav-item">
-                                        <a class="btn btn-light btn-sm fw-bold text-primary" href="{% url 'login' %}">Entrar</a>
-                                    </li>
-                                {% endif %}
-                            </ul>
-                        </li>
-
-                        <li class="nav-item ms-2">
-                            <form action="{% url 'logout' %}" method="post">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger">
-                                    <i class="bi bi-box-arrow-right"></i> Sair
-                                </button>
-                            </form>
-                        </li>
-
-                    {% else %}
-                        <li class="nav-item">
-                            <a class="nav-link {% if nbar == 'dashboard' %}active text-primary fw-bold{% endif %}" href="{% url 'listagem' %}">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if nbar == 'gerenciar' %}active text-primary fw-bold{% endif %}" href="{% url 'gerenciar' %}">Gerenciar</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="btn btn-primary btn-sm" href="{% url 'login' %}">Entrar</a>
-                        </li>
-                    {% endif %}
-
+                    <li class="nav-item">
+                        <a class="nav-link text-white {% if nbar == 'orcamentos' %}fw-bold{% endif %}" href="{% url 'orcamentos' %}">
+                            <i class="bi bi-speedometer2"></i> Orçamentos
+                        </a>
+                    </li>
                 </ul>
+
+                <!-- 4. User Profile (Extrema Direita) -->
+                <ul class="navbar-nav align-items-center ms-3 me-3">
+                    <li class="nav-item me-3 text-white-50 small">
+                        Olá, <strong class="text-white">{{ user.username }}</strong>
+                    </li>
+                    <li class="nav-item">
+                        <form action="{% url 'logout' %}" method="post" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="Sair">
+                                <i class="bi bi-power"></i>
+                            </button>
+                        </form>
+                    </li>
+                </ul>
+                {% else %}
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="btn btn-light btn-sm fw-bold text-primary" href="{% url 'login' %}">Entrar</a>
+                    </li>
+                </ul>
+                {% endif %}
             </div>
         </div>
     </nav>
@@ -297,6 +295,7 @@
         const CSRF_TOKEN = "{{ csrf_token }}";
     </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="{% static 'js/chatbot.js' %}?v=1.5"></script>
     
     {% block scripts %}

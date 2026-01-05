@@ -1,0 +1,74 @@
+{% extends 'contas/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="row mb-4 animate__animated animate__fadeIn">
+    <div class="col-md-8">
+        <h2 class="fw-bold text-dark"><i class="bi bi-speedometer2 me-2"></i>Orçamentos Mensais</h2>
+        <p class="text-muted">Defina limites de gastos por categoria para o mês atual.</p>
+    </div>
+    <div class="col-md-4 text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoOrcamento" onclick="limparFormOrcamento()">
+            <i class="bi bi-plus-lg me-2"></i>Novo Orçamento
+        </button>
+    </div>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loadingBudgets" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Carregando...</span>
+    </div>
+    <p class="mt-2 text-muted">Buscando seus orçamentos...</p>
+</div>
+
+<!-- Grid de Orçamentos -->
+<div id="budgetsGrid" class="row row-cols-1 row-cols-md-3 g-4" style="display: none;">
+    <!-- Cards Renderizados via JS -->
+</div>
+
+<!-- Modal Novo/Editar Orçamento -->
+<div class="modal fade" id="modalNovoOrcamento" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title fw-bold"><i class="bi bi-wallet2 me-2"></i>Definir Orçamento</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formOrcamento">
+                    {% csrf_token %}
+                    <input type="hidden" id="orcamentoId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Categoria</label>
+                        <select class="form-select" id="orcCategoria" required>
+                            <!-- Options carregadas via JS -->
+                        </select>
+                        <div class="form-text">Escolha a categoria para monitorar.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Limite Mensal (R$)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">R$</span>
+                            <input type="number" class="form-control" id="orcValorLimite" step="0.01" required>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary fw-bold" onclick="salvarOrcamento()">
+                    <i class="bi bi-check-lg me-1"></i>Salvar Orçamento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/orcamentos.js' %}"></script>
+{% endblock %}

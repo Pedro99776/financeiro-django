@@ -159,7 +159,7 @@ function renderizarObjetivos(lista) {
                             </div>
                             <div class="dropdown">
                                 <button class="btn btn-link text-muted p-0" data-bs-toggle="dropdown">
-                                    <i class="fas fa-ellipsis-v"></i>
+                                    <i class="bi bi-three-dots-vertical"></i>
                                 </button>
                                 <ul class="dropdown-menu dropdown-menu-end">
                                     <li><a class="dropdown-item" href="#" onclick="editarObjetivo(${obj.id})">Editar</a></li>
@@ -188,10 +188,10 @@ function renderizarObjetivos(lista) {
 
                         <div class="d-grid gap-2 d-flex">
                             <button class="btn btn-outline-success flex-grow-1 btn-sm" onclick="abrirModalMovimentar(${obj.id}, 'depositar', '${obj.nome}')">
-                                <i class="fas fa-plus"></i> Guardar
+                                <i class="bi bi-plus-lg"></i> Guardar
                             </button>
                             <button class="btn btn-outline-secondary flex-grow-1 btn-sm" onclick="abrirModalMovimentar(${obj.id}, 'resgatar', '${obj.nome}')">
-                                <i class="fas fa-minus"></i> Resgatar
+                                <i class="bi bi-dash-lg"></i> Resgatar
                             </button>
                         </div>
                     </div>

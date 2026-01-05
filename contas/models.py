@@ -146,3 +146,15 @@ class Objetivo(models.Model):
     def __str__(self):
         return f"{self.nome} ({self.valor_atual}/{self.valor_alvo})"
 
+
+class Orcamento(models.Model):
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE)
+    categoria = models.ForeignKey(Categoria, on_delete=models.CASCADE)
+    valor_limite = models.DecimalField(max_digits=12, decimal_places=2)
+    # Não armazenamos valor_gasto; calculado dinamicamente
+
+    class Meta:
+        unique_together = ('usuario', 'categoria')
+
+    def __str__(self):
+        return f"Orçamento {self.categoria.nome}: R$ {self.valor_limite}"

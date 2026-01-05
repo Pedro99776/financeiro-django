@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from django.db.models import Sum
 from datetime import datetime
-from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito, Objetivo
+from decimal import Decimal
+from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito, Objetivo, Orcamento
 
 
 class CategoriaSerializer(serializers.ModelSerializer):
@@ -241,6 +242,37 @@ class ObjetivoSerializer(serializers.ModelSerializer):
         model = Objetivo
         fields = '__all__'
         read_only_fields = ['usuario', 'valor_atual']
+
+    def create(self, validated_data):
+        validated_data['usuario'] = self.context['request'].user
+        return super().create(validated_data)
+
+class OrcamentoSerializer(serializers.ModelSerializer):
+    """Serializer para Orçamentos (Metas de Gastos)"""
+    categoria_nome = serializers.CharField(source='categoria.nome', read_only=True)
+    valor_gasto = serializers.SerializerMethodField()
+    percentual = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Orcamento
+        fields = ['id', 'categoria', 'categoria_nome', 'valor_limite', 'valor_gasto', 'percentual']
+        read_only_fields = ['id', 'valor_gasto', 'percentual']
+
+    def get_valor_gasto(self, obj):
+        hoje = datetime.now()
+        gastos = Transacao.objects.filter(
+            categoria=obj.categoria, # Categoria já pertence ao usuário
+            data__year=hoje.year,
+            data__month=hoje.month,
+            tipo='D'
+        ).aggregate(Sum('valor'))['valor__sum'] or Decimal(0)
+        return gastos
+
+    def get_percentual(self, obj):
+        gasto = self.get_valor_gasto(obj)
+        if obj.valor_limite > 0:
+            return (gasto / obj.valor_limite) * 100
+        return 0
 
     def create(self, validated_data):
         validated_data['usuario'] = self.context['request'].user

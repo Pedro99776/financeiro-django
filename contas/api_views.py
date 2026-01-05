@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from decimal import Decimal
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
@@ -430,6 +431,57 @@ class AnalyticsViewSet(viewsets.ViewSet):
         serializer = GastosPorCategoriaSerializer(resultado, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def historico_anual(self, request):
+        """Retorna histórico de Receitas vs Despesas dos últimos 12 meses"""
+        hoje = datetime.now()
+        dados = []
+        
+        for i in range(11, -1, -1):
+            data_ref = hoje - relativedelta(months=i)
+            mes = data_ref.month
+            ano = data_ref.year
+            
+            qs = Transacao.objects.filter(
+                conta__usuario=request.user,
+                data__year=ano,
+                data__month=mes
+            )
+            
+            receitas = qs.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+            despesas = qs.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+            
+            dados.append({
+                'mes_ano': f"{mes:02d}/{ano}",
+                'receitas': receitas,
+                'despesas': despesas
+            })
+            
+        return Response(dados)
+
+    @action(detail=False, methods=['get'])
+    def maiores_gastos(self, request):
+        """Retorna as 5 maiores despesas do mês selecionado"""
+        mes, ano = self._get_periodo_params(request)
+        
+        qs = Transacao.objects.filter(
+            conta__usuario=request.user,
+            data__year=ano,
+            data__month=mes,
+            tipo='D'
+        ).order_by('-valor')[:5]
+        
+        resultado = []
+        for t in qs:
+            resultado.append({
+                'descricao': t.descricao,
+                'valor': t.valor,
+                'data': t.data,
+                'categoria': t.categoria.nome if t.categoria else 'Sem Categoria'
+            })
+            
+        return Response(resultado)
+
 
 from .models import Objetivo
 from .serializers import ObjetivoSerializer
@@ -498,3 +550,15 @@ class ObjetivoViewSet(viewsets.ModelViewSet):
         objetivo.save()
         
         return Response({'status': 'Resgate realizado', 'valor_atual': objetivo.valor_atual})
+
+
+from .models import Orcamento
+from .serializers import OrcamentoSerializer
+
+class OrcamentoViewSet(viewsets.ModelViewSet):
+    """Viewset para Orçamentos (Limites de Gastos)"""
+    serializer_class = OrcamentoSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Orcamento.objects.filter(usuario=self.request.user)

@@ -635,3 +635,16 @@ def objetivos(request):
     Renderiza a página de Objetivos (Cofrinho).
     """
     return render(request, 'contas/objetivos.html', {'nbar': 'objetivos'})
+@login_required
+def orcamentos(request):
+    """
+    Renderiza a página de Orçamentos (Metas de Gastos).
+    """
+    return render(request, 'contas/orcamentos.html', {'nbar': 'orcamentos'})
+
+@login_required
+def estatisticas(request):
+    """
+    Renderiza a página de Estatísticas (Dashboard Avançado).
+    """
+    return render(request, 'contas/estatisticas.html', {'nbar': 'estatisticas'})
