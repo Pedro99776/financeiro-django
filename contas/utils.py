@@ -24,7 +24,7 @@ def importar_extrato_com_ia(arquivo_upload, categorias_disponiveis):
     if ext in ['.csv', '.txt']:
         return processar_csv_workflow(arquivo_upload, categorias_disponiveis, client)
 
-    nome_modelo = 'gemini-2.5-flash' # Atualizado para o modelo mais recente compatível com o SDK novo
+    nome_modelo = 'gemini-3.1-flash-lite' # Atualizado para o modelo mais recente compatível com o SDK novo
 
     # --- ARQUIVO TEMPORÁRIO ---
     # Detecta a extensão do arquivo enviado
@@ -203,7 +203,7 @@ def processar_csv_workflow(arquivo, categorias_disponiveis, client):
         
         try:
             resp_header = client.models.generate_content(
-                model='gemini-2.0-flash',
+                model='gemini-3.1-flash-lite',
                 contents=prompt_header,
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -341,7 +341,7 @@ def processar_csv_workflow(arquivo, categorias_disponiveis, client):
                 
                 try:
                     resp_cat = client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model='gemini-3.1-flash-lite',
                         contents=prompt_cat,
                         config=types.GenerateContentConfig(response_mime_type="application/json")
                     )

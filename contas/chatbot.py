@@ -842,7 +842,7 @@ def gerar_resposta_chatbot(mensagem_usuario, usuario, historico=None):
     try:
         # 3. Primeira chamada ao Modelo
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-3.1-flash-lite',
             contents=contents,
             config=generate_config
         )
@@ -892,7 +892,7 @@ def gerar_resposta_chatbot(mensagem_usuario, usuario, historico=None):
 
                 # 6. Segunda chamada (Modelo processa o resultado e responde ao user)
                 response_final = client.models.generate_content(
-                    model='gemini-2.0-flash',
+                    model='gemini-3.1-flash-lite',
                     contents=contents,
                     config=generate_config
                 )
