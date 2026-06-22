@@ -10,7 +10,7 @@ from decimal import Decimal
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
 from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm, CartaoCreditoForm
-from .utils import importar_extrato_com_ia
+from .utils import importar_extrato_via_microsservico
 from .serializers import TransacaoSerializer
 from .chatbot import gerar_resposta_chatbot, limpar_historico_chat
 
@@ -423,12 +423,12 @@ def importar_extrato(request):
                 # Prepara lista de nomes para a IA
                 nomes_categorias = [c.nome for c in categorias]
 
-                # Chama a IA
+                # Envia ao microsserviço PDF to MD
                 try:
-                    dados_brutos = importar_extrato_com_ia(arquivo, nomes_categorias)
+                    dados_brutos = importar_extrato_via_microsservico(arquivo, nomes_categorias)
 
                     if not dados_brutos:
-                        messages.error(request, "A IA não encontrou transações ou houve um erro.")
+                        messages.error(request, "O microsserviço não encontrou transações no arquivo. Verifique se o PDF ou CSV contém um extrato bancário válido.")
                         return redirect('importar_extrato')
 
                     # Serializa dados para a sessão

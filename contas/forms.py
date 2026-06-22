@@ -86,8 +86,8 @@ class CartaoCreditoForm(forms.ModelForm):
 
 class UploadFileForm(forms.Form):
     arquivo = forms.FileField(
-        label="Selecione o Extrato (PDF, Imagem ou CSV)",
-        widget=forms.ClearableFileInput(attrs={'accept': 'application/pdf, image/*, .csv, text/csv'})
+        label="Selecione o Extrato (PDF ou CSV)",
+        widget=forms.ClearableFileInput(attrs={'accept': 'application/pdf,.csv,text/csv'})
     )
     conta = forms.ModelChoiceField(
         queryset=Conta.objects.none(),  # ✅ IMPORTANTE: Começa vazio
