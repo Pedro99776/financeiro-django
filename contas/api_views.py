@@ -1,8 +1,9 @@
-from django.core.exceptions import ValidationError
+from rest_framework.exceptions import ValidationError
 from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Sum, Count, Q
+from django.db.models.functions import TruncMonth
 from django.shortcuts import get_object_or_404
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
@@ -100,7 +101,6 @@ class FaturaViewSet(BaseUserViewSet):
     @action(detail=True, methods=['post'])
     def pagar(self, request, pk=None):
         fatura = self.get_object()
-        fatura = self.get_object()
         
         # Valor a pagar (default: saldo restante)
         saldo_restante = fatura.valor_total - fatura.valor_pago
@@ -159,8 +159,6 @@ class FaturaViewSet(BaseUserViewSet):
 
 class TransacaoViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
-
-    from rest_framework.exceptions import ValidationError
 
     def perform_create(self, serializer):
         data = serializer.validated_data
@@ -436,26 +434,40 @@ class AnalyticsViewSet(viewsets.ViewSet):
     def historico_anual(self, request):
         """Retorna histórico de Receitas vs Despesas dos últimos 12 meses"""
         hoje = datetime.now()
-        dados = []
+        data_inicio = (hoje - relativedelta(months=11)).replace(day=1)
         
+        # Faz uma única consulta agrupada por mês
+        agrupamento = Transacao.objects.filter(
+            conta__usuario=request.user,
+            data__gte=data_inicio
+        ).annotate(
+            mes_ano_trunc=TruncMonth('data')
+        ).values('mes_ano_trunc').annotate(
+            receitas=Sum('valor', filter=Q(tipo='R')),
+            despesas=Sum('valor', filter=Q(tipo__in=['D', 'I']))
+        ).order_by('mes_ano_trunc')
+        
+        # Cria um dicionário para busca rápida
+        dados_por_mes = {
+            item['mes_ano_trunc'].strftime('%m/%Y'): {
+                'receitas': item['receitas'] or 0,
+                'despesas': item['despesas'] or 0
+            }
+            for item in agrupamento if item['mes_ano_trunc']
+        }
+        
+        # Monta a resposta garantindo que todos os 12 meses apareçam, mesmo se zerados
+        dados = []
         for i in range(11, -1, -1):
             data_ref = hoje - relativedelta(months=i)
-            mes = data_ref.month
-            ano = data_ref.year
+            chave_mes = data_ref.strftime('%m/%Y')
             
-            qs = Transacao.objects.filter(
-                conta__usuario=request.user,
-                data__year=ano,
-                data__month=mes
-            )
-            
-            receitas = qs.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
-            despesas = qs.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
+            valores = dados_por_mes.get(chave_mes, {'receitas': 0, 'despesas': 0})
             
             dados.append({
-                'mes_ano': f"{mes:02d}/{ano}",
-                'receitas': receitas,
-                'despesas': despesas
+                'mes_ano': chave_mes,
+                'receitas': valores['receitas'],
+                'despesas': valores['despesas']
             })
             
         return Response(dados)

@@ -7,6 +7,7 @@ from django.db import IntegrityError, transaction
 from datetime import date, datetime, timedelta
 import calendar
 from decimal import Decimal
+from django.views.decorators.http import require_POST
 
 from .models import Transacao, Categoria, Conta, CartaoCredito, FaturaCredito
 from .forms import UploadFileForm, TransacaoForm, CategoriaForm, ContaForm, CartaoCreditoForm
@@ -236,17 +237,9 @@ def transacoes_api(request):
     cat_despesas_data = [float(item['total']) for item in desp_cat]
 
     # --- 6. SALDO EM CAIXA ATUAL (ACUMULADO) ---
-    # Soma dos saldos iniciais de todas as contas + todas as receitas e despesas históricas
+    # Soma dos saldos atuais de todas as contas
     contas = Conta.objects.filter(usuario=request.user)
-    
-    total_inicial = contas.aggregate(Sum('saldo_inicial'))['saldo_inicial__sum'] or 0
-    
-    # Todas as transações até hoje (para saldo acumulado)
-    todas_transacoes = Transacao.objects.filter(conta__usuario=request.user)
-    hist_receitas = todas_transacoes.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
-    hist_despesas = todas_transacoes.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
-    
-    saldo_caixa_atual = total_inicial + hist_receitas - hist_despesas
+    saldo_caixa_atual = contas.aggregate(Sum('saldo_atual'))['saldo_atual__sum'] or 0
 
     # --- 6.1 FATURAS EM ABERTO ---
     faturas_aberto = FaturaCredito.objects.filter(
@@ -351,6 +344,7 @@ def update_transacao(request, pk):
 
 
 @login_required
+@require_POST
 def delete_transacao(request, pk):
     # ✅ SEGURANÇA ROBUSTA: Busca a transação e verifica permissão manualmente
     transacao = get_object_or_404(Transacao, pk=pk)
@@ -448,25 +442,35 @@ def importar_extrato(request):
                              item_copy['alerta_duplicidade'] = True
                              item_copy['motivo_alerta'] = "Possível pagamento de fatura (Duplicidade)"
 
-                        # Detecção de Duplicidade Exata (Hash)
+                        # Detecção de Duplicidade Exata (via Query e Tupla)
                         try:
-                            # Converte para Decimal para garantir hash idêntico ao Model
-                            val_dec = Decimal(str(item_copy.get('valor', 0)))
-                            h_check = Transacao.gerar_hash(item_copy['data'], val_dec, item_copy.get('descricao'))
+                            data_str = item_copy.get('data')
+                            valor_dec = Decimal(str(item_copy.get('valor', 0)))
+                            descricao = item_copy.get('descricao', '')
                             
                             is_dup = False
-                            if Transacao.objects.filter(hash_id=h_check).exists():
+                            
+                            # Verifica duplicidade no banco de dados para a mesma conta
+                            if Transacao.objects.filter(
+                                conta_id=conta_id,
+                                data=data_str,
+                                valor=valor_dec,
+                                descricao=descricao
+                            ).exists():
                                 is_dup = True
                                 item_copy['motivo_alerta'] = "Transação já importada (Idêntica)"
-                            elif h_check in seen_hashes:
-                                is_dup = True
-                                item_copy['motivo_alerta'] = "Duplicada neste arquivo"
+                            else:
+                                # Chave única para verificar duplicidade dentro do próprio arquivo
+                                file_hash = f"{data_str}|{valor_dec}|{descricao}"
+                                if file_hash in seen_hashes:
+                                    is_dup = True
+                                    item_copy['motivo_alerta'] = "Duplicada neste arquivo"
+                                else:
+                                    seen_hashes.add(file_hash)
                                 
                             if is_dup:
                                 item_copy['alerta_duplicidade'] = True
                                 
-                            seen_hashes.add(h_check)
-                            
                         except Exception as e:
                             pass
 

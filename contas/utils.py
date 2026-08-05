@@ -1,5 +1,6 @@
 import os
 import requests
+import threading
 from datetime import datetime
 
 
@@ -145,3 +146,20 @@ def importar_extrato_via_microsservico(arquivo_upload, categorias_disponiveis: l
 
     print(f"✅  Total de transações recebidas do microsserviço: {len(transacoes)}")
     return transacoes
+
+def wake_up_PDF_to_MD_HF():
+    """
+    Faz uma requisição GET assíncrona (em outra thread) para a URL base do
+    microsserviço no Hugging Face, com o objetivo de "acordar" o Space
+    após um período ocioso.
+    """
+    def _wake_up():
+        try:
+            print(f"--- Tentando acordar microserviço PDF_TO_MD_HF em {PDF_TO_MD_API_URL} ---")
+            requests.get(PDF_TO_MD_API_URL, timeout=10)
+        except Exception as e:
+            print(f"--- Falha ao acordar microserviço PDF_TO_MD_HF (ignorado): {e} ---")
+
+    thread = threading.Thread(target=_wake_up)
+    thread.daemon = True
+    thread.start()

@@ -4,7 +4,7 @@
 <div class="container mt-4">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3><i class="bi bi-robot"></i> Importação Inteligente</h3>
+        <h3><i class="bi bi-upload"></i> Importar Extrato</h3>
         {% if preview %}
         <span class="badge bg-warning text-dark">Modo de Revisão</span>
         {% endif %}
@@ -15,7 +15,7 @@
     <div class="card shadow">
         <div class="card-body p-5 text-center">
             <h5 class="card-title mb-4">Envie seu Extrato (PDF, Imagem ou CSV)</h5>
-            <p class="text-muted">A IA irá ler, categorizar e permitir que você revise antes de salvar.</p>
+            <p class="text-muted">O sistema irá extrair os dados e permitir que você revise as transações antes de salvar.</p>
 
             <form id="formUpload" method="post" enctype="multipart/form-data" class="d-inline-block text-start"
                 style="max-width: 400px;">
@@ -25,7 +25,7 @@
                 </div>
                 <div class="d-grid">
                     <button type="submit" class="btn btn-primary btn-lg">
-                        <i class="bi bi-magic"></i> Processar com IA
+                        <i class="bi bi-gear"></i> Processar Arquivo
                     </button>
                 </div>
             </form>
@@ -36,7 +36,7 @@
     <div id="loadingOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-90 flex-column justify-content-center align-items-center" style="z-index: 2000; backdrop-filter: blur(5px);">
         <div class="spinner-border text-primary mb-4" style="width: 5rem; height: 5rem;" role="status"></div>
         <h3 class="text-primary fw-bold animate-pulse">Processando Extrato...</h3>
-        <p class="text-muted fs-5">A Inteligência Artificial está lendo seu documento.</p>
+        <p class="text-muted fs-5">O sistema está processando e extraindo as informações do seu documento.</p>
     </div>
     {% endif %}
 

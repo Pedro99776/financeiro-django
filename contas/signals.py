@@ -1,9 +1,11 @@
 from django.db.models.signals import pre_save, post_save, post_delete
+from django.contrib.auth.signals import user_logged_in
 from django.dispatch import receiver
 from django.db.models import Sum
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 from .models import Transacao, FaturaCredito
+from .utils import wake_up_PDF_to_MD_HF
 
 @receiver(pre_save, sender=Transacao)
 def vincular_transacao_a_fatura(sender, instance, **kwargs):
@@ -14,12 +16,14 @@ def vincular_transacao_a_fatura(sender, instance, **kwargs):
     # A. Rastrear Fatura Antiga
     instance._old_fatura_pk = None
     instance._old_fatura_pagamento_pk = None
+    instance._old_conta_pk = None
     
     if instance.pk:
         try:
             old = Transacao.objects.get(pk=instance.pk)
             instance._old_fatura_pk = old.fatura_id
             instance._old_fatura_pagamento_pk = old.fatura_pagamento_id
+            instance._old_conta_pk = old.conta_id
         except Transacao.DoesNotExist:
             pass
 
@@ -141,3 +145,36 @@ def atualizar_valor_fatura(sender, instance, **kwargs):
         except FaturaCredito.DoesNotExist:
             # Fatura foi deletada, ignora
             continue
+
+
+@receiver(post_save, sender=Transacao)
+@receiver(post_delete, sender=Transacao)
+def atualizar_saldo_conta(sender, instance, **kwargs):
+    """
+    Atualiza o saldo atual da conta vinculada à transação
+    """
+    from .models import Conta
+    contas_ids = set()
+    if instance.conta_id:
+        contas_ids.add(instance.conta_id)
+        
+    if getattr(instance, '_old_conta_pk', None):
+        contas_ids.add(instance._old_conta_pk)
+        
+    for cid in contas_ids:
+        try:
+            conta = Conta.objects.get(pk=cid)
+            receitas = Transacao.objects.filter(conta=conta, tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
+            despesas = Transacao.objects.filter(conta=conta, tipo__in=['D', 'I']).aggregate(Sum('valor'))['valor__sum'] or 0
+            conta.saldo_atual = conta.saldo_inicial + receitas - despesas
+            conta.save()
+        except Conta.DoesNotExist:
+            continue
+
+@receiver(user_logged_in)
+def acordar_PDF_TO_MD_hf(sender, user, request, **kwargs):
+    """
+    Ao fazer login, envia um request em background para o microsserviço
+    do Hugging Face para que ele saia do estado 'sleeping'.
+    """
+    wake_up_PDF_to_MD_HF()

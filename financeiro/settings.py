@@ -15,8 +15,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # ============================================
 # SEGURANÇA BÁSICA
 # ============================================
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-chave-padrao')
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
+SECRET_KEY = os.getenv('SECRET_KEY')
+
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-chave-padrao'
+    else:
+        raise ValueError("A variável de ambiente SECRET_KEY deve estar definida em produção (DEBUG=False).")
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '*').split(',')  # ✅ Aceita lista do ambiente (ex: site.com,localhost)
 if not os.getenv('ALLOWED_HOSTS'):
      # Fallback seguro para dev local se não houver variável explícita
@@ -159,7 +165,7 @@ SESSION_COOKIE_SAMESITE = 'Lax'  # ✅ Proteção contra CSRF
 SESSION_COOKIE_AGE = 86400  # 24 horas (pode ajustar)
 
 # 2. Proteção CSRF
-CSRF_COOKIE_HTTPONLY = True  # ✅ JavaScript não consegue ler token CSRF
+CSRF_COOKIE_HTTPONLY = False  # ✅ False é o padrão do Django (permite ao JS ler o token com segurança para chamadas AJAX)
 CSRF_COOKIE_SECURE = not DEBUG  # ✅ CSRF token só via HTTPS em produção
 CSRF_COOKIE_SAMESITE = 'Lax'
 

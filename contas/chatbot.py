@@ -558,10 +558,19 @@ def _consultar_fatura_cartao_func(usuario, cartao_id, mes=None, ano=None, detalh
 def _consultar_resumo_financeiro_func(usuario, tipo, conta_id=None, ano=None, mes=None, modalidade=None):
     try:
         if tipo == "saldo_total":
-            total = 0
+            from django.db.models import Sum, Q
+            from django.db.models.functions import Coalesce
+            from decimal import Decimal
+            
+            contas = Conta.objects.filter(usuario=usuario).annotate(
+                receitas=Coalesce(Sum('transacao__valor', filter=Q(transacao__tipo='R')), Decimal('0.00')),
+                despesas=Coalesce(Sum('transacao__valor', filter=Q(transacao__tipo__in=['D', 'I'])), Decimal('0.00'))
+            )
+            
+            total = Decimal('0.00')
             txt = "**Saldo das Contas:**\n"
-            for c in Conta.objects.filter(usuario=usuario):
-                s = c.saldo_atual
+            for c in contas:
+                s = c.saldo_inicial + c.receitas - c.despesas
                 total += s
                 txt += f"- {c.nome}: R$ {s:,.2f}\n"
             return txt + f"\n💰 **Total: R$ {total:,.2f}**"

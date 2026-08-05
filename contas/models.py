@@ -19,16 +19,11 @@ class Conta(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.CASCADE)
     nome = models.CharField(max_length=100)  # Ex: Nubank, Carteira
     saldo_inicial = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    saldo_atual = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     instituicao = models.CharField(max_length=100, blank=True, null=True)  # Para uso futuro na importação
 
     def __str__(self):
         return self.nome
-
-    @property
-    def saldo_atual(self):
-        receitas = self.transacao_set.filter(tipo='R').aggregate(Sum('valor'))['valor__sum'] or 0
-        despesas = self.transacao_set.filter(tipo='D').aggregate(Sum('valor'))['valor__sum'] or 0
-        return self.saldo_inicial + receitas - despesas
 
 
 
@@ -81,7 +76,6 @@ class Transacao(models.Model):
         ('I', 'Investimento/Aplicação'),
     )
 
-    tipo = models.CharField(max_length=1, choices=TIPO_CHOICES, default='D')
     objetivo = models.ForeignKey('Objetivo', on_delete=models.SET_NULL, null=True, blank=True)
     
     conta = models.ForeignKey(Conta, on_delete=models.CASCADE, null=True, blank=True)

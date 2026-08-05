@@ -15,26 +15,12 @@ class CategoriaSerializer(serializers.ModelSerializer):
 
 class ContaSerializer(serializers.ModelSerializer):
     """Serializer para Contas"""
-    saldo_atual = serializers.SerializerMethodField()
 
     class Meta:
         model = Conta
         fields = ['id', 'nome', 'instituicao', 'saldo_inicial', 'saldo_atual']
         read_only_fields = ['id', 'saldo_atual']
 
-    def get_saldo_atual(self, obj):
-        """Calcula saldo atual baseado nas transações"""
-        receitas = Transacao.objects.filter(
-            conta=obj,
-            tipo='R'
-        ).aggregate(Sum('valor'))['valor__sum'] or 0
-
-        despesas = Transacao.objects.filter(
-            conta=obj,
-            tipo__in=['D', 'I']
-        ).aggregate(Sum('valor'))['valor__sum'] or 0
-
-        return float(obj.saldo_inicial + receitas - despesas)
 
 
 class FaturaCreditoSerializer(serializers.ModelSerializer):
@@ -262,6 +248,7 @@ class OrcamentoSerializer(serializers.ModelSerializer):
         hoje = datetime.now()
         gastos = Transacao.objects.filter(
             categoria=obj.categoria, # Categoria já pertence ao usuário
+            conta__usuario=obj.usuario,
             data__year=hoje.year,
             data__month=hoje.month,
             tipo='D'

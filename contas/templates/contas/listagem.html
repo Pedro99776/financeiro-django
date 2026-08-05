@@ -601,16 +601,10 @@ document.addEventListener("DOMContentLoaded", function() {
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteModal'));
 
     window.confirmarExclusao = function(id, descricao) {
-        deleteId = id;
         document.getElementById('deleteDescricao').textContent = descricao;
+        document.getElementById('deleteForm').action = `/delete/${id}/`;
         deleteModal.show();
     };
-
-    document.getElementById('btnConfirmarDelete').addEventListener('click', function() {
-        if (deleteId) {
-            window.location.href = `/delete/${deleteId}/`;
-        }
-    });
 
     // --- 8. INICIALIZAÇÃO ---
     carregarFiltros().then(() => {
@@ -632,10 +626,13 @@ document.addEventListener("DOMContentLoaded", function() {
             Você está prestes a excluir a transação: <br>
             <strong id="deleteDescricao" class="text-dark"></strong>
         </p>
-        <div class="d-flex justify-content-center gap-2">
-            <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancelar</button>
-            <button type="button" id="btnConfirmarDelete" class="btn btn-danger px-4">Sim, Excluir</button>
-        </div>
+        <form id="deleteForm" method="POST" action="">
+            {% csrf_token %}
+            <div class="d-flex justify-content-center gap-2">
+                <button type="button" class="btn btn-light px-4" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" id="btnConfirmarDelete" class="btn btn-danger px-4">Sim, Excluir</button>
+            </div>
+        </form>
       </div>
     </div>
   </div>
